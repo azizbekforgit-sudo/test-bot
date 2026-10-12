@@ -7,7 +7,7 @@ from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
-from aiohttp import web
+from aiohttp import ClientSession, ClientTimeout, web
 
 from .config import config
 from .db import Database
@@ -15,6 +15,19 @@ from .handlers import get_routers
 from .scheduler import watch_test_endings
 
 WEBHOOK_PATH = "/telegram/webhook"
+KEEP_ALIVE_EVERY = 10 * 60  # soniya (Render 15 daqiqadan keyin uxlatadi)
+
+
+async def keep_alive(url: str) -> None:
+    """Botning o'z manziliga vaqti-vaqti bilan so'rov yuboradi, shunda Render uni uxlatmaydi."""
+    async with ClientSession(timeout=ClientTimeout(total=30)) as session:
+        while True:
+            await asyncio.sleep(KEEP_ALIVE_EVERY)
+            try:
+                async with session.get(url) as resp:
+                    await resp.read()
+            except Exception as e:
+                logging.warning("keep-alive so'rovi muvaffaqiyatsiz: %s", e)
 
 
 async def run_webhook(bot: Bot, dp: Dispatcher) -> None:
@@ -38,9 +51,12 @@ async def run_webhook(bot: Bot, dp: Dispatcher) -> None:
     await runner.setup()
     await web.TCPSite(runner, "0.0.0.0", config.port).start()
     logging.info("Webhook rejimi: %s%s (port %s)", config.webhook_base, WEBHOOK_PATH, config.port)
+    pinger = asyncio.create_task(keep_alive(f"{config.webhook_base}/")) if config.keep_alive else None
     try:
         await asyncio.Event().wait()
     finally:
+        if pinger:
+            pinger.cancel()
         await runner.cleanup()
 
 

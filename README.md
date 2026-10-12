@@ -77,6 +77,13 @@ Render'dagi muhit o'zgaruvchilari (Environment):
 | `TIMEZONE` | `Asia/Tashkent` |
 | `PYTHON_VERSION` | `3.12.8` |
 | `WEBHOOK_SECRET` | ixtiyoriy maxfiy so'z (Telegram so'rovlarini tekshirish uchun) |
+| `KEEP_ALIVE` | `1` — bot uxlab qolmasligi uchun har 10 daqiqada o'ziga so'rov yuboradi |
+
+ℹ️ **Uxlab qolish haqida.** Render'ning bepul tarifida xizmat 15 daqiqa so'rovsiz qolsa uxlaydi va
+keyingi xabarda ≈30–60 soniyada uyg'onadi. `KEEP_ALIVE=1` buni oldini oladi. Lekin bepul tarifda
+butun workspace uchun oyiga **750 soat** beriladi: doim uyg'oq bot ≈744 soat sarflaydi, shuning uchun
+shu workspace'dagi boshqa bepul xizmatlar bilan birga limitdan oshib ketishi mumkin. Eng ishonchli
+yo'l — shu xizmatni **Starter** tarifiga o'tkazish (u hech qachon uxlamaydi).
 
 Kodni GitHub'dagi tarmoqqa (branch) push qilsangiz, Render botni **avtomatik** qayta joylaydi.
 

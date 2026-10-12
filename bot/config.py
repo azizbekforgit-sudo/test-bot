@@ -18,6 +18,9 @@ class Config:
     webhook_base: str | None
     webhook_secret: str
     port: int
+    # Render bepul tarifida bot 15 daqiqa so'rovsiz qolsa uxlab qoladi.
+    # KEEP_ALIVE=1 bo'lsa, bot har 10 daqiqada o'z manziliga so'rov yuborib, uyg'oq turadi.
+    keep_alive: bool
 
 
 def load_config() -> Config:
@@ -40,6 +43,7 @@ def load_config() -> Config:
         webhook_base=(os.getenv("WEBHOOK_URL") or os.getenv("RENDER_EXTERNAL_URL") or "").rstrip("/") or None,
         webhook_secret=os.getenv("WEBHOOK_SECRET") or token.split(":")[-1][-20:],
         port=int(os.getenv("PORT", "8080")),
+        keep_alive=os.getenv("KEEP_ALIVE", "").lower() in ("1", "true", "yes"),
     )
 
 
