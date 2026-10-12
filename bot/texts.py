@@ -1,154 +1,177 @@
-"""Bot matnlari. Tilni o'zgartirish uchun faqat shu faylni tahrirlash kifoya."""
+"""Bot matnlari. Tilni o'zgartirish uchun asosan shu faylni tahrirlash kifoya."""
 
 # ---------- tugmalar ----------
-BTN_CREATE_ROOM = "➕ Xona yaratish"
-BTN_MY_ROOMS = "📂 Mavjud xonalar"
-BTN_ADD_TEACHER = "👨‍🏫 O'qituvchi qo'shish"
-BTN_TEACHERS = "📋 O'qituvchilar ro'yxati"
-BTN_REMOVE_TEACHER = "❌ O'qituvchini o'chirish"
+BTN_NEW_TEST = "➕ Yangi test"
+BTN_TESTS = "📋 Testlar"
+BTN_SETTINGS = "⚙️ Sozlamalar"
 BTN_CANCEL = "🚫 Bekor qilish"
-BTN_DONE = "✅ Test yuborib bo'lindi"
+BTN_FROM_SCRATCH = "🆕 Noldan yaratish"
+BTN_FROM_OLD = "♻️ Oldingi testdan"
+BTN_SKIP = "⏭ O'tkazib yuborish"
+BTN_SAVE = "✅ Saqlash"
+BTN_EDIT = "✏️ O'zgartirish"
 BTN_YES = "✅ Ha"
 BTN_NO = "❌ Yo'q"
 BTN_BACK = "⬅️ Orqaga"
 BTN_SEND_RESULTS = "📤 Natijalarni o'quvchilarga yuborish"
-BTN_LINK = "🔗 Xona havolasi"
-BTN_SHOW_TEST = "📄 Testni ko'rish"
-BTN_DELETE_ROOM = "🗑 Xonani o'chirish"
+BTN_SHOW_CARD = "👁 Kartani ko'rish"
+BTN_POST_CHANNEL = "📢 Kanalga joylash"
+BTN_CLONE = "♻️ Nusxa olish"
+BTN_DELETE = "🗑 O'chirish"
+BTN_CHANGE_CHANNEL = "✏️ Kanalni o'zgartirish"
+BTN_OPEN_RESULTS = "📊 Natijalarni ochish"
 
 # ---------- umumiy ----------
-WELCOME_DIRECTOR = "Assalomu alaykum, direktor! 👋\nQuyidagi menyudan foydalaning."
-WELCOME_TEACHER = "Assalomu alaykum, ustoz! 👋\nQuyidagi menyudan foydalaning."
+WELCOME_ADMIN = "Assalomu alaykum, admin! 👋\nQuyidagi menyudan foydalaning."
 WELCOME_STUDENT = (
     "Assalomu alaykum! 👋\n\n"
-    "Testga kirish uchun o'qituvchingiz yuborgan havolani bosing."
+    "Testga kirish uchun <b>test kodini</b> yuboring.\n"
+    "Masalan: <code>mock002</code>"
 )
 CANCELLED = "Bekor qilindi."
-UNKNOWN = "Tushunmadim 🤔 Menyudagi tugmalardan foydalaning yoki /start bosing."
-NO_ACCESS = "Bu bo'lim siz uchun emas."
 
-# ---------- direktor ----------
-INVITE_CREATED = (
-    "✅ O'qituvchi uchun taklif havolasi tayyor:\n\n{link}\n\n"
-    "Bu havolani o'qituvchiga yuboring. U havolani bosgach, o'qituvchi roliga ega bo'ladi.\n"
-    "⚠️ Havola faqat <b>bir marta</b> ishlaydi."
+# ---------- sozlamalar ----------
+ASK_CHANNEL = (
+    "📢 Telegram <b>kanalingizni</b> kiriting (bir marta so'raladi, keyin bot eslab qoladi).\n"
+    "U kartaning pastida ko'rsatiladi va «📢 Kanalga joylash» tugmasi shu kanalga yuboradi.\n\n"
+    "Masalan: <code>@xodiyevacademy</code>\n\n"
+    "Kanal kerak bo'lmasa — <code>-</code> yuboring."
 )
-INVITE_INVALID = "❌ Bu taklif havolasi yaroqsiz yoki allaqachon ishlatilgan."
-INVITE_ALREADY_TEACHER = "Siz allaqachon o'qituvchisiz 🙂"
-INVITE_OK = "🎉 Tabriklaymiz! Sizga <b>o'qituvchi</b> roli berildi."
-INVITE_USED_NOTIFY = "✅ {name} taklif havolangiz orqali o'qituvchi bo'ldi."
-TEACHERS_EMPTY = "Hozircha o'qituvchilar yo'q."
-TEACHERS_TITLE = "📋 <b>O'qituvchilar ro'yxati</b> ({count} ta):\n"
-TEACHER_ROW = "{i}. {name}{username} — ID: <code>{id}</code>, xonalar: {rooms}"
-REMOVE_TEACHER_CHOOSE = "Qaysi o'qituvchini o'chirmoqchisiz?"
-REMOVE_TEACHER_CONFIRM = "{name} o'qituvchilar ro'yxatidan o'chirilsinmi?"
-TEACHER_REMOVED = "✅ {name} o'qituvchilar ro'yxatidan o'chirildi."
-TEACHER_REMOVED_NOTIFY = "ℹ️ Sizning o'qituvchi rolingiz bekor qilindi."
+CHANNEL_BAD = "❌ Kanalni tushunmadim. Masalan: <code>@kanal_nomi</code> yoki <code>-</code>"
+CHANNEL_SAVED = "✅ Saqlandi. Kanal: {channel}"
+SETTINGS_VIEW = (
+    "⚙️ <b>Sozlamalar</b>\n\n"
+    "📢 Kanal: {channel}\n"
+    "🤖 Bot: @{bot}\n\n"
+    "Kanalga to'g'ridan-to'g'ri joylash uchun botni kanalga <b>admin</b> qilib qo'shing."
+)
+NO_CHANNEL = "yo'q"
 
-# ---------- xona yaratish ----------
-ASK_ROOM_NAME = "Xona nomini kiriting.\nMasalan: <b>11A Biologiya</b>"
-ROOM_NAME_BAD = "Xona nomi 1–64 belgidan iborat matn bo'lishi kerak. Qaytadan kiriting."
-ASK_TEST = (
-    "📎 Endi testni yuboring.\n\n"
-    "Test <b>matn</b>, <b>rasm</b> yoki <b>fayl</b> ko'rinishida bo'lishi mumkin. "
-    "Bir nechta xabar/rasm yuborsangiz ham bo'ladi.\n\n"
-    "Hammasini yuborib bo'lgach, «{done}» tugmasini bosing."
+# ---------- test yaratish ----------
+NEW_TEST_CHOOSE = "Qanday test yaratamiz?"
+BLANK_CARD_INTRO = "📄 Karta namunasi (bo'sh joylarni hozir birma-bir to'ldiramiz) 👇"
+CLONE_INTRO = (
+    "♻️ «{title}» testidan nusxa olinmoqda.\n"
+    "Yangi <b>sana, vaqt va kodni</b> kiriting. Qolgan narsalarni (fayl, javoblar, matnlar) "
+    "oxirida «{edit}» tugmasi orqali o'zgartirishingiz mumkin."
 )
-TEST_PART_SAVED = "✔️ Qabul qilindi ({count}). Yana yuborishingiz yoki «{done}» tugmasini bosishingiz mumkin."
-TEST_PART_BAD = "Faqat matn, rasm yoki fayl yuboring."
-TEST_EMPTY = "Siz hali test yubormadingiz. Avval testni yuboring."
-ASK_EXAMPLE = (
-    "✍️ O'quvchilar javoblarni qanday ko'rinishda yozishi kerakligiga <b>namuna</b> yozing.\n\n"
-    "Masalan: <code>1A 2B 3C</code>\n\n"
-    "Bu namuna o'quvchilarga test boshlanishidan oldin ko'rsatiladi."
+PICK_OLD_TEST = "Qaysi testdan nusxa olamiz?"
+NO_TESTS = "Hali testlar yo'q. «{new}» tugmasi orqali yarating."
+CODE_TAKEN = "❌ <code>{code}</code> kodi boshqa testda ishlatilgan. Boshqa kod kiriting."
+FILE_BAD = "📎 Fayl (PDF) yoki rasm yuboring."
+FILE_SAVED = "✔️ Fayl qabul qilindi."
+PREVIEW = (
+    "👆 Karta shunday ko'rinadi.\n\n"
+    "Savollar soni: <b>{total}</b>\n"
+    "To'g'ri javoblar: <code>{answers}</code>\n\n"
+    "Hammasi to'g'rimi?"
 )
-EXAMPLE_BAD = "Namunani tushunmadim. Masalan shunday yozing: <code>1A 2B 3C</code>"
-ASK_CORRECT = (
-    "✅ Endi to'g'ri javoblarni kiriting.\n\n"
-    "⚠️ Iltimos, javoblarni <b>bitta matnli xabarda</b> yuboring "
-    "(rasm emas!) — shunda bot ularni avtomatik tekshira oladi.\n\n"
-    "Masalan:\n<code>1 C\n2 A\n3 B</code>"
-)
-CORRECT_BAD = (
-    "❌ Javoblarni ajrata olmadim. Har bir savol raqamidan keyin harf yozing:\n"
-    "<code>1 C\n2 A\n3 B</code>"
-)
-CORRECT_CONFIRM = (
-    "Tekshiring, to'g'ri javoblar shularmi?\n\n"
-    "Savollar soni: <b>{total}</b>\n{answers}"
-)
-ROOM_CREATED = (
-    "🎉 <b>{name}</b> xonasi yaratildi!\n\n"
-    "Savollar soni: {total}\n\n"
-    "Quyidagi havolani o'quvchilarga yuboring 👇\n{link}"
-)
+PREVIEW_MISSING = "⚠️ Hali to'ldirilmagan majburiy maydonlar: {fields}"
+PREVIEW_PAST = "⚠️ Diqqat: bu sana va vaqt allaqachon o'tib ketgan — o'quvchilar javob yubora olmaydi."
+EDITING = "✏️ Tahrirlash"
+PREVIEW_HINT = "Pastdagi tugmalardan foydalaning: «✅ Saqlash» yoki «✏️ O'zgartirish»."
+EDITED = "✅ O'zgartirildi."
+CHOOSE_FIELD = "Nimani o'zgartiramiz?"
+TEST_SAVED = "🎉 Test saqlandi! Endi kartani kanalga joylashingiz mumkin."
+DRAFT_EXPIRED = "Bu qoralama eskirgan. «{new}» tugmasini qaytadan bosing."
 
-# ---------- xonalar ro'yxati ----------
-ROOMS_EMPTY = "Sizda hali xonalar yo'q. «{create}» tugmasi orqali yarating."
-ROOMS_TITLE = "📂 <b>Sizning xonalaringiz</b>\nKerakli xonani tanlang:"
-ROOM_BTN = "{name} ({count} ta javob)"
-ROOM_VIEW = (
-    "🏫 <b>{name}</b>\n"
+# ---------- testlar ro'yxati ----------
+TESTS_TITLE = "📋 <b>Testlar</b>\n⏳ — boshlanmagan, 🟢 — davom etmoqda, 🔴 — yakunlangan"
+TEST_BTN = "{icon} {code} · {date} · {count} ta"
+STATUS_TEXT = {
+    "upcoming": "⏳ Hali boshlanmagan",
+    "active": "🟢 Hozir davom etmoqda",
+    "finished": "🔴 Yakunlangan",
+}
+STATUS_ICON = {"upcoming": "⏳", "active": "🟢", "finished": "🔴"}
+TEST_VIEW = (
+    "🔑 <b>{code}</b>\n"
+    "🏆 {title}\n"
+    "📅 {date}, {start} – {end}\n"
+    "{status}\n\n"
     "Savollar soni: {total}\n"
-    "Javob berganlar: {count} ta\n"
-    "Havola: {link}\n\n"
-    "{body}"
+    "Javob berganlar: {count} ta\n\n"
+    "{hint}"
 )
-ROOM_NO_SUBS = "Hali hech kim javob bermadi."
-ROOM_SUBS_HINT = "O'quvchi ustiga bossangiz, uning javoblarini ko'rasiz:"
-STUDENT_BTN = "{mark}{name} — {correct}/{total}"
-ROOM_LINK = "🔗 <b>{name}</b> xonasi havolasi:\n{link}"
-ROOM_DELETE_CONFIRM = "⚠️ <b>{name}</b> xonasi va undagi barcha javoblar o'chirilsinmi?"
-TEST_ANSWERS = "🔑 To'g'ri javoblar ({total} ta):\n<code>{answers}</code>"
-ROOM_DELETED = "🗑 Xona o'chirildi."
-ROOM_NOT_FOUND = "Xona topilmadi."
+TEST_NO_RESULTS = "Hali hech kim javob bermadi."
+TEST_RESULTS_HINT = "O'quvchilar natijasi bo'yicha tartiblangan. Ism ustiga bossangiz — batafsil:"
+RESULT_BTN = "{medal}{rank}. {mark}{name} — {correct}/{total}"
+MEDALS = {1: "🥇 ", 2: "🥈 ", 3: "🥉 "}
+TEST_NOT_FOUND = "Test topilmadi."
+DELETE_CONFIRM = "⚠️ <b>{code}</b> testi va undagi barcha natijalar o'chirilsinmi?"
+DELETED = "🗑 Test o'chirildi."
+POSTED = "✅ Karta {channel} kanaliga joylandi."
+POST_NO_CHANNEL = "Avval «⚙️ Sozlamalar» bo'limida kanalni kiriting."
+POST_FAILED = (
+    "❌ Kanalga yuborib bo'lmadi.\n"
+    "Botni {channel} kanaliga <b>admin</b> qilib qo'shing (xabar yuborish huquqi bilan) va qaytadan urinib ko'ring.\n\n"
+    "Yoki «👁 Kartani ko'rish» bosib, kartani kanalga o'zingiz forward qiling."
+)
 
-SUB_DETAIL = (
+RESULT_DETAIL = (
     "👤 <b>{name}</b>\n"
-    "🏫 Xona: {room}\n"
-    "Natija: <b>{correct}/{total}</b>\n"
+    "🔑 Test: {code}\n"
+    "Natija: <b>{correct}/{total}</b> ({percent}%)\n"
+    "O'rni: {rank}\n"
     "Yuborilgan vaqt: {time}\n\n"
     "{rows}"
 )
-SUB_ROW_OK = "✅ {q}. {given}"
-SUB_ROW_BAD = "❌ {q}. {given} (to'g'ri: {correct})"
+ROW_OK = "✅ {q}. {given}"
+ROW_BAD = "❌ {q}. {given} (to'g'ri: {correct})"
 NO_ANSWER = "—"
 
+RESULTS_NOT_FINISHED = "Test hali tugamagan. Natijalarni test tugagandan keyin yuborish mumkin."
 RESULTS_NOTHING = "Barcha o'quvchilarga natijalar allaqachon yuborilgan."
+RESULTS_SENDING = "📤 Natijalar yuborilmoqda... ({n} ta o'quvchi)"
 RESULTS_SENT = "📤 Natijalar yuborildi: {ok} ta o'quvchiga.{failed}"
 RESULTS_FAILED = "\n⚠️ {n} ta o'quvchiga yuborib bo'lmadi (botni bloklagan bo'lishi mumkin)."
 STUDENT_RESULT = (
-    "📊 <b>{room}</b> testi natijasi\n\n"
-    "Siz <b>{total}</b> ta savoldan <b>{correct}</b> tasiga to'g'ri javob berdingiz.\n"
+    "📊 <b>{code}</b> testi natijasi\n"
+    "🏆 {title}\n\n"
+    "Siz <b>{total}</b> ta savoldan <b>{correct}</b> tasiga to'g'ri javob berdingiz ({percent}%).\n"
     "{wrong}"
 )
 STUDENT_RESULT_WRONG = "\n❌ Xato qilingan savollar:\n{rows}"
 STUDENT_RESULT_WRONG_ROW = "{q}-savol (sizning javobingiz: {given})"
 STUDENT_RESULT_PERFECT = "\n🏆 Barcha javoblar to'g'ri! Barakalla!"
 
-NEW_SUBMISSION_NOTIFY = "📥 <b>{room}</b>: {name} javob yubordi — {correct}/{total}"
+TEST_ENDED_NOTIFY = (
+    "⏰ <b>{code}</b> testi yakunlandi!\n"
+    "Javob berganlar: {count} ta.\n\n"
+    "Natijalar eng ko'p to'g'ri javob berganidan boshlab tartiblangan."
+)
 
 # ---------- o'quvchi ----------
-ROOM_LINK_INVALID = "❌ Bunday xona topilmadi. Havola noto'g'ri yoki xona o'chirilgan."
-ASK_FULL_NAME = "Iltimos, ism va familiyangizni kiriting.\nMasalan: <b>Aliyev Vali</b>"
+CODE_NOT_FOUND = "❌ <code>{code}</code> kodli test topilmadi.\nKodni tekshirib, qaytadan yuboring."
+TEST_UPCOMING = (
+    "⏳ <b>{code}</b> testi hali boshlanmagan.\n"
+    "Boshlanish vaqti: <b>{date}, soat {start}</b>"
+)
+TEST_FINISHED = (
+    "🔴 <b>{code}</b> testi yakunlangan ({date}, soat {end}).\n"
+    "Javoblar endi qabul qilinmaydi."
+)
+ALREADY_SUBMITTED = "Siz <b>{code}</b> testiga allaqachon javob yuborgansiz ✅\nNatija test tugagandan keyin yuboriladi."
+ASK_FULL_NAME = "Iltimos, <b>ism va familiyangizni</b> kiriting.\nMasalan: <b>Aliyev Vali</b>"
 FULL_NAME_BAD = "Ism-familiya 3–64 belgidan iborat matn bo'lishi kerak. Qaytadan kiriting."
-JOINED_ROOM = "✅ Siz <b>{name}</b> xonasiga kirdingiz!"
-ALREADY_SUBMITTED = "Siz <b>{name}</b> xonasidagi testga allaqachon javob yuborgansiz ✅\nNatijani o'qituvchingiz yuboradi."
+FULL_NAME_SAVED = "✅ Ism saqlandi: <b>{name}</b>"
+JOINED_TEST = "✅ Siz <b>{code}</b> testiga kirdingiz!\n🏆 {title}"
 TEST_RULES = (
     "📌 <b>Diqqat!</b>\n\n"
     "Testda <b>{total}</b> ta savol bor.\n"
-    "Barcha javoblarni <b>bitta matnli xabarda</b> yuboring.\n\n"
-    "Javob yozish namunasi:\n<code>{example}</code>\n\n"
-    "Test quyida 👇"
+    "Barcha javoblarni <b>bitta matnli xabarda</b> yuboring.\n"
+    "⏰ Javoblar <b>soat {end}</b> gacha qabul qilinadi.\n\n"
+    "Javob yozish namunasi:\n<code>{example}</code>"
 )
-TEST_END = "✍️ Javoblaringizni bitta xabarda yuboring."
+ANSWER_EXAMPLE = "1A 2B 3C 4D"
 STUDENT_ANSWER_BAD = (
-    "❌ Javoblarni tushunmadim. Iltimos, namunadagidek yozing:\n<code>{example}</code>"
+    "❌ Javoblarni tushunmadim. Iltimos, namunadagidek yozing:\n<code>{example}</code>\n\n"
+    "Boshqa testga o'tish uchun /start bosing."
 )
 STUDENT_ANSWER_TEXT_ONLY = "Javoblarni <b>matn</b> ko'rinishida, bitta xabarda yuboring."
 STUDENT_CONFIRM = (
     "Siz yuborgan javoblar:\n<code>{answers}</code>\n\n"
-    "{missing}"
+    "{warn}"
     "❓ Barcha javoblarni yubordingizmi va namunadagidek to'g'ri yozdingizmi?\n"
     "«Ha» bosilgandan keyin javobni o'zgartirib bo'lmaydi."
 )
@@ -156,7 +179,8 @@ STUDENT_MISSING = "⚠️ Javobsiz savollar: {numbers}\n\n"
 STUDENT_EXTRA = "⚠️ Testda bunday savollar yo'q (hisobga olinmaydi): {numbers}\n\n"
 STUDENT_RESEND = "Yaxshi, javoblaringizni qaytadan bitta xabarda yuboring.\nNamuna: <code>{example}</code>"
 STUDENT_SUBMITTED = (
-    "✅ Javoblaringiz o'qituvchiga yuborildi!\n"
-    "Natijani o'qituvchingiz tekshirib yuboradi."
+    "✅ Javoblaringiz qabul qilindi!\n"
+    "Natijangiz test tugagandan keyin shu yerga yuboriladi."
 )
-ROOM_GONE = "Xona o'chirilgan ekan 😕"
+TIME_IS_UP = "⏰ Kechirasiz, test vaqti tugadi ({end}). Javoblar qabul qilinmaydi."
+TEST_GONE = "Bu test o'chirilgan ekan 😕"

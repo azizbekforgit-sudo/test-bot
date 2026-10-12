@@ -6,8 +6,9 @@ from aiogram.types import CallbackQuery, Message
 from .. import keyboards as kb
 from .. import texts as t
 from ..answers import count_correct, format_answers, parse_answers
-from ..db import Database, Room
-from ..utils import esc, send_materials
+from ..db import Database, Test
+from ..timeutils import ACTIVE, FINISHED, UPCOMING, status_of
+from ..utils import esc
 
 router = Router(name="student")
 
@@ -18,37 +19,53 @@ class Student(StatesGroup):
     confirming = State()
 
 
-async def join_room(message: Message, state: FSMContext, db: Database, room: Room) -> None:
-    """O'quvchi xona havolasini bosganda chaqiriladi (common.start_with_payload dan)."""
-    uid = message.from_user.id
-    if await db.get_submission(room.id, uid):
-        await message.answer(t.ALREADY_SUBMITTED.format(name=esc(room.name)))
+async def enter_code(message: Message, state: FSMContext, db: Database, code: str) -> None:
+    """O'quvchi test kodini yuborganda (yoki karta havolasini bosganda) chaqiriladi."""
+    test = await db.get_test_by_code(code)
+    if test is None:
+        await message.answer(t.CODE_NOT_FOUND.format(code=esc(code[:40])))
         return
 
-    await message.answer(t.JOINED_ROOM.format(name=esc(room.name)))
-    await state.update_data(room_id=room.id)
+    fmt = dict(code=esc(test.code), date=test.date, start=test.start_time, end=test.end_time)
+    st = status_of(test)
+    if st == UPCOMING:
+        await message.answer(t.TEST_UPCOMING.format(**fmt))
+        return
+    if st == FINISHED:
+        await message.answer(t.TEST_FINISHED.format(**fmt))
+        return
+    if await db.get_result(test.id, message.from_user.id):
+        await message.answer(t.ALREADY_SUBMITTED.format(**fmt))
+        return
 
-    if not await db.get_full_name(uid):
+    await state.clear()
+    await state.update_data(test_id=test.id)
+    await message.answer(t.JOINED_TEST.format(code=esc(test.code), title=esc(test.title)))
+
+    if not await db.get_full_name(message.from_user.id):
         await state.set_state(Student.full_name)
         await message.answer(t.ASK_FULL_NAME)
         return
+    await start_test(message, state, test)
 
-    await start_test(message, state, db, room)
 
-
-async def start_test(message: Message, state: FSMContext, db: Database, room: Room) -> None:
+async def start_test(message: Message, state: FSMContext, test: Test) -> None:
+    if test.file_kind == "document":
+        await message.answer_document(test.file_id)
+    elif test.file_kind == "photo":
+        await message.answer_photo(test.file_id)
     await message.answer(
-        t.TEST_RULES.format(total=len(room.correct_answers), example=esc(room.answer_example))
+        t.TEST_RULES.format(total=len(test.correct_answers), end=test.end_time, example=t.ANSWER_EXAMPLE)
     )
-    await send_materials(message, await db.get_materials(room.id))
-    await message.answer(t.TEST_END)
     await state.set_state(Student.answering)
 
 
-async def _current_room(state: FSMContext, db: Database) -> Room | None:
-    room_id = (await state.get_data()).get("room_id")
-    return await db.get_room(room_id) if room_id else None
+async def _current_test(state: FSMContext, db: Database) -> Test | None:
+    test_id = (await state.get_data()).get("test_id")
+    return await db.get_test(test_id) if test_id else None
 
+
+# =============== ism-familiya ===============
 
 @router.message(Student.full_name, F.text)
 async def full_name(message: Message, state: FSMContext, db: Database) -> None:
@@ -57,12 +74,16 @@ async def full_name(message: Message, state: FSMContext, db: Database) -> None:
         await message.answer(t.FULL_NAME_BAD)
         return
     await db.set_full_name(message.from_user.id, name)
-    room = await _current_room(state, db)
-    if room is None:
+    test = await _current_test(state, db)
+    if test is None:  # /ism buyrug'i orqali o'zgartirildi
         await state.clear()
-        await message.answer(t.ROOM_GONE)
+        await message.answer(t.FULL_NAME_SAVED.format(name=esc(name)))
         return
-    await start_test(message, state, db, room)
+    if status_of(test) != ACTIVE:
+        await state.clear()
+        await message.answer(t.TIME_IS_UP.format(end=test.end_time))
+        return
+    await start_test(message, state, test)
 
 
 @router.message(Student.full_name)
@@ -70,22 +91,28 @@ async def full_name_bad(message: Message) -> None:
     await message.answer(t.FULL_NAME_BAD)
 
 
+# =============== javoblar ===============
+
 @router.message(Student.answering, F.text)
 @router.message(Student.confirming, F.text)
 async def got_answers(message: Message, state: FSMContext, db: Database) -> None:
-    room = await _current_room(state, db)
-    if room is None:
+    test = await _current_test(state, db)
+    if test is None:
         await state.clear()
-        await message.answer(t.ROOM_GONE)
+        await message.answer(t.TEST_GONE)
+        return
+    if status_of(test) == FINISHED:
+        await state.clear()
+        await message.answer(t.TIME_IS_UP.format(end=test.end_time))
         return
 
     answers = parse_answers(message.text)
     if not answers:
-        await message.answer(t.STUDENT_ANSWER_BAD.format(example=esc(room.answer_example)))
+        await message.answer(t.STUDENT_ANSWER_BAD.format(example=t.ANSWER_EXAMPLE))
         return
 
-    missing = [q for q in room.correct_answers if q not in answers]
-    extra = [q for q in answers if q not in room.correct_answers]
+    missing = [q for q in test.correct_answers if q not in answers]
+    extra = [q for q in answers if q not in test.correct_answers]
     warn = ""
     if missing:
         warn += t.STUDENT_MISSING.format(numbers=", ".join(missing))
@@ -95,7 +122,7 @@ async def got_answers(message: Message, state: FSMContext, db: Database) -> None
     await state.update_data(answers=answers)
     await state.set_state(Student.confirming)
     await message.answer(
-        t.STUDENT_CONFIRM.format(answers=format_answers(answers), missing=warn),
+        t.STUDENT_CONFIRM.format(answers=format_answers(answers), warn=warn),
         reply_markup=kb.answer_confirm_kb(),
     )
 
@@ -107,45 +134,38 @@ async def answers_not_text(message: Message) -> None:
 
 
 @router.callback_query(kb.AnswerCb.filter(F.action == "no"), Student.confirming)
-async def answers_no(call: CallbackQuery, state: FSMContext, db: Database) -> None:
-    room = await _current_room(state, db)
+async def answers_no(call: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(Student.answering)
     await call.message.edit_reply_markup(reply_markup=None)
-    example = esc(room.answer_example) if room else ""
-    await call.message.answer(t.STUDENT_RESEND.format(example=example))
+    await call.message.answer(t.STUDENT_RESEND.format(example=t.ANSWER_EXAMPLE))
     await call.answer()
 
 
 @router.callback_query(kb.AnswerCb.filter(F.action == "yes"), Student.confirming)
-async def answers_yes(call: CallbackQuery, state: FSMContext, db: Database, bot: Bot) -> None:
+async def answers_yes(call: CallbackQuery, state: FSMContext, db: Database) -> None:
     data = await state.get_data()
-    room = await _current_room(state, db)
+    test = await _current_test(state, db)
     await state.clear()
     await call.message.edit_reply_markup(reply_markup=None)
     await call.answer()
-    if room is None:
-        await call.message.answer(t.ROOM_GONE)
+    if test is None:
+        await call.message.answer(t.TEST_GONE)
+        return
+    # Vaqt «Ha» bosilgan paytda ham tekshiriladi
+    if status_of(test) == FINISHED:
+        await call.message.answer(t.TIME_IS_UP.format(end=test.end_time))
         return
 
     uid = call.from_user.id
     answers: dict[str, str] = data["answers"]
-    correct = count_correct(room.correct_answers, answers)
-    total = len(room.correct_answers)
     name = await db.get_full_name(uid) or call.from_user.full_name
-
-    saved = await db.add_submission(room.id, uid, name, answers, correct, total)
+    saved = await db.add_result(
+        test.id, uid, name, answers, count_correct(test.correct_answers, answers), len(test.correct_answers)
+    )
     if not saved:
-        await call.message.answer(t.ALREADY_SUBMITTED.format(name=esc(room.name)))
+        await call.message.answer(t.ALREADY_SUBMITTED.format(code=esc(test.code)))
         return
-
     await call.message.answer(t.STUDENT_SUBMITTED)
-    try:
-        await bot.send_message(
-            room.teacher_id,
-            t.NEW_SUBMISSION_NOTIFY.format(room=esc(room.name), name=esc(name), correct=correct, total=total),
-        )
-    except Exception:
-        pass
 
 
 # Eski tugmalar bosilsa (holat allaqachon tugagan)
@@ -155,7 +175,13 @@ async def stale_answer_button(call: CallbackQuery) -> None:
     await call.message.edit_reply_markup(reply_markup=None)
 
 
-# Hech qaysi handler tutmagan xabarlar
+# =============== test kodi ===============
+
+@router.message(F.text, ~F.text.startswith("/"))
+async def code_message(message: Message, state: FSMContext, db: Database) -> None:
+    await enter_code(message, state, db, message.text.strip())
+
+
 @router.message()
 async def fallback(message: Message) -> None:
-    await message.answer(t.UNKNOWN)
+    await message.answer(t.WELCOME_STUDENT)

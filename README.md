@@ -1,15 +1,16 @@
 # 📝 Test qabul qiluvchi Telegram bot
 
-Bu bot o'qituvchilarga test o'tkazish, o'quvchilarning javoblarini avtomatik tekshirish
-va natijalarni o'quvchilarga yuborish uchun mo'ljallangan.
+Bu bot orqali admin **test e'lon qiladi** (kanal uchun tayyor karta bilan), o'quvchilar
+**test kodi** orqali kirib javob yuboradi, bot javoblarni **avtomatik tekshiradi**,
+natijalarni **eng yaxshidan boshlab tartiblaydi** va admin bir tugma bilan har bir
+o'quvchiga uning natijasini yuboradi.
 
-Botda **3 ta rol** bor:
+Botda faqat **2 ta rol** bor:
 
 | Rol | Kim | Nima qila oladi |
 |-----|-----|-----------------|
-| 👔 **Direktor** (admin) | `.env` faylida ID raqami yozilgan odam | O'qituvchi qo'shadi, ro'yxatini ko'radi, o'chiradi. Xohlasa, o'zi ham xona yarata oladi |
-| 👨‍🏫 **O'qituvchi** | Direktor bergan havolani bosgan odam | Xona (test) yaratadi, natijalarni ko'radi, natijalarni o'quvchilarga yuboradi |
-| 🎓 **O'quvchi** | Qolgan hamma | Faqat o'qituvchi bergan havola orqali testga kiradi va javob yuboradi |
+| 👑 **Admin** | `.env` faylida ID raqami yozilgan odam | Test yaratadi, kartani kanalga joylaydi, natijalarni ko'radi va o'quvchilarga yuboradi |
+| 🎓 **O'quvchi** | Qolgan hamma | Test kodini yuborib testga kiradi va javob yuboradi |
 
 ---
 
@@ -20,22 +21,24 @@ Botda **3 ta rol** bor:
 2. `/newbot` buyrug'ini yuboring, botga nom va username bering.
 3. BotFather bergan **tokenni** saqlab qo'ying (masalan `123456789:AAH...`).
 
-### 1.2. Direktor ID sini bilish
-[@userinfobot](https://t.me/userinfobot) ga `/start` yozing — u sizning **ID** raqamingizni beradi
-(masalan `123456789`).
+### 1.2. Admin ID sini bilish
+[@userinfobot](https://t.me/userinfobot) ga `/start` yozing — u sizning **ID** raqamingizni beradi.
 
 ### 1.3. Sozlash
-Loyiha papkasida `.env.example` faylidan nusxa olib, `.env` deb nomlang va to'ldiring:
+`.env.example` faylidan nusxa olib, `.env` deb nomlang va to'ldiring:
 
 ```env
 BOT_TOKEN=123456789:AAH...........
-DIRECTOR_IDS=123456789
+ADMIN_IDS=123456789
+TIMEZONE=Asia/Tashkent
 DB_PATH=bot.db
 ```
 
 * `BOT_TOKEN` — BotFather bergan token.
-* `DIRECTOR_IDS` — direktor(lar) ID si. Bir nechta bo'lsa vergul bilan: `111,222`.
-* `DB_PATH` — ma'lumotlar saqlanadigan fayl nomi (o'zgartirmasangiz ham bo'ladi).
+* `ADMIN_IDS` — admin(lar) ID si. Bir nechta bo'lsa vergul bilan: `111,222`.
+* `TIMEZONE` — vaqt mintaqasi. Test boshlanish/tugash vaqtlari shu bo'yicha hisoblanadi
+  (O'zbekiston uchun `Asia/Tashkent`, o'zgartirish shart emas).
+* `DB_PATH` — ma'lumotlar saqlanadigan fayl.
 
 ### 1.4. O'rnatish va ishga tushirish
 Kompyuterda **Python 3.10 yoki undan yangi** versiya bo'lishi kerak.
@@ -48,127 +51,172 @@ pip install -r requirements.txt
 python -m bot.main
 ```
 
-Terminalda `Bot ishga tushdi: @sizning_bot` yozuvi chiqsa — bot ishlayapti ✅.
-Bot doim ishlab turishi uchun uni server (VPS) da yoki hosting (Render, Railway va h.k.) da ishga tushiring.
+Terminalda `Bot ishga tushdi: @sizning_bot` chiqsa — bot ishlayapti ✅.
+Bot doim ishlab turishi uchun uni serverda (VPS) yoki hostingda (Render, Railway va h.k.) ishga tushiring.
+
+> Agar avval botning eski versiyasi (xonalar bilan) ishlatilgan bo'lsa, eski `bot.db` faylini
+> o'chirib yuborish tavsiya etiladi.
 
 ---
 
-## 2. Direktor (admin panel) 👔
+## 2. Admin 👑
 
-Direktor `/start` bosganda unga quyidagi menyu chiqadi:
+Admin `/start` bosganda 3 ta tugma chiqadi: **➕ Yangi test**, **📋 Testlar**, **⚙️ Sozlamalar**.
 
-* **👨‍🏫 O'qituvchi qo'shish** — bot maxsus havola beradi, masalan:
-  `https://t.me/sizning_bot?start=teacher_xxxxxx`.
-  Bu havolani o'qituvchiga yuborasiz. O'qituvchi havolani bosishi bilan unga
-  **o'qituvchi roli** beriladi va direktorga xabar keladi.
-  ⚠️ Har bir havola **faqat bir marta** ishlaydi — har bir o'qituvchi uchun yangi havola oling.
-* **📋 O'qituvchilar ro'yxati** — rol berilgan barcha o'qituvchilar: ismi, username, ID si va nechta xonasi borligi.
-* **❌ O'qituvchini o'chirish** — ro'yxatdan o'qituvchini tanlaysiz, «Ha» bosasiz va
-  uning o'qituvchi roli olib tashlanadi (o'qituvchiga ham xabar boradi).
-  Uning xonalari va natijalari o'chib ketmaydi — qayta qo'shilsa, hammasi joyida bo'ladi.
+### 2.1. Bir marta kiritiladigan sozlama — kanal
 
-Direktorda o'qituvchi tugmalari ham bor (**➕ Xona yaratish**, **📂 Mavjud xonalar**),
-shuning uchun botni o'zi ham sinab ko'rishi mumkin.
+Birinchi marta **➕ Yangi test** bosilganda bot kanalingizni so'raydi (masalan `@xodiyevacademy`).
+Bot uni **eslab qoladi** va keyin boshqa so'ramaydi. Kanal kartaning pastida chiqadi:
 
----
+* «Testni maksimal darajada tarqatib yuboring» — kanalni ulashish havolasi;
+* `✈️ @kanal` — kanal nomi.
 
-## 3. O'qituvchi 👨‍🏫
+Bot havolasi (`Javob yuborish uchun : @bot`) esa **avtomatik** qo'yiladi — uni kiritish shart emas.
 
-O'qituvchi menyusida 2 ta tugma bor: **➕ Xona yaratish** va **📂 Mavjud xonalar**.
+Kanalni keyin **⚙️ Sozlamalar → ✏️ Kanalni o'zgartirish** orqali almashtirish mumkin.
+Kanal kerak bo'lmasa `-` yuboriladi.
 
-### 3.1. Xona (test) yaratish — qadamma-qadam
+### 2.2. Yangi test yaratish
 
-1. **➕ Xona yaratish** bosiladi.
-2. Bot: *«Xona nomini kiriting»* → o'qituvchi yozadi, masalan `11A Biologiya`.
-3. Bot: *«Endi testni yuboring»* → o'qituvchi testni **matn**, **rasm** yoki **fayl** ko'rinishida yuboradi.
-   Bir nechta xabar yoki bir nechta rasm (albom) yuborish mumkin.
-   Hammasini yuborib bo'lgach **«✅ Test yuborib bo'lindi»** tugmasi bosiladi.
-4. Bot: *«O'quvchilar javobni qanday yozishi kerakligiga namuna yozing»* →
-   o'qituvchi namuna yozadi, masalan `1A 2B 3C`.
-   Bu namuna o'quvchilarga test oldidan ko'rsatiladi, shunda ular qanday yozishni biladi.
-5. Bot ogohlantiradi: *«To'g'ri javoblarni **bitta matnli xabarda** yuboring (rasm emas!)»* —
-   chunki bot javoblarni matndan o'qib, avtomatik tekshiradi. O'qituvchi yozadi:
-   ```
-   1 C
-   2 A
-   3 B
-   ```
-6. Bot to'g'ri javoblarni qaytarib ko'rsatadi va so'raydi: *«To'g'ri javoblar shularmi?»*
-   * **✅ Ha** — xona yaratiladi;
-   * **❌ Yo'q** — javoblarni qaytadan kiritasiz.
-7. Bot **xona havolasini** beradi, masalan:
-   `https://t.me/sizning_bot?start=room_AbC123xyz`
-   Shu havolani o'quvchilarga (masalan, sinf guruhiga) yuborasiz.
+**➕ Yangi test** bosilganda ikki variant chiqadi:
 
-Istalgan bosqichda **🚫 Bekor qilish** tugmasi yoki `/cancel` buyrug'i bilan jarayonni to'xtatish mumkin.
+#### 🆕 Noldan yaratish
+Bot avval **bo'sh karta namunasini** ko'rsatadi (hamma ma'lumotlar o'rnida `________`),
+keyin maydonlarni birma-bir so'raydi:
 
-### 3.2. Mavjud xonalar
+| № | Maydon | Misol | Majburiymi |
+|---|--------|-------|------------|
+| 1 | 🏆 Sarlavha | `2-MILLIY SERTIFIKAT DIAGNOSTIK TEST TOPSHIRIQLARI KITOBI (RASH MODELIDA)` | ✅ ha |
+| 2 | ☑️ Fan / til | `Til: Qoraqalpoq tili` | yo'q |
+| 3 | #️⃣ Heshteglar | `#MOCKEXAM #RASH` | yo'q |
+| 4 | 📌 Kichik sarlavha | `Bilimni baholash agentligi formatida 🔴` | yo'q |
+| 5 | 💬 Yakuniy matn | `Hammaga omad🚀 Test yakunlangach natijalar ... e'lon qilinadi` | yo'q |
+| 6 | 📅 Sana | `12.07.2026` | ✅ ha |
+| 7 | 🕙 Boshlanish vaqti | `10:00` | ✅ ha |
+| 8 | 🕧 Tugash vaqti | `12:30` | ✅ ha |
+| 9 | 🔑 Test kodi | `mock002` | ✅ ha |
+| 10 | 📎 Test fayli | PDF yoki rasm | yo'q |
+| 11 | ✅ To'g'ri javoblar | `1A 2B 3C ...` | ✅ ha |
 
-**📂 Mavjud xonalar** bosilganda o'qituvchi yaratgan barcha xonalar ro'yxati chiqadi
-(har birining yonida nechta o'quvchi javob bergani yoziladi).
-Xona tanlanganda:
+Majburiy bo'lmagan maydonlarni **⏭ O'tkazib yuborish** tugmasi bilan tashlab ketish mumkin —
+ular kartada ko'rinmaydi.
 
-* **O'quvchilar ro'yxati** — testni yechgan har bir o'quvchi va yonida natijasi, masalan:
-  `Aliyev Ali — 8/10` (10 ta savoldan 8 tasi to'g'ri).
-  O'quvchilar eng ko'p to'g'ri javob berganidan boshlab tartiblangan.
+⚠️ To'g'ri javoblarni bot **bitta matnli xabarda** yuborishni so'raydi (rasm emas!),
+chunki o'quvchilarni shu matn bo'yicha avtomatik tekshiradi. Masalan:
+```
+1 C
+2 A
+3 B
+```
+
+Hammasi kiritilgach, bot **tayyor kartani** (fayl bilan birga) ko'rsatadi, savollar sonini
+va to'g'ri javoblarni yozadi va so'raydi:
+* **✅ Saqlash** — test saqlanadi;
+* **✏️ O'zgartirish** — istalgan maydonni tanlab, qayta kiritasiz.
+
+#### ♻️ Oldingi testdan
+Avval yaratilgan testlar ro'yxati chiqadi. Birini tanlasangiz, bot undan **nusxa oladi**
+(sarlavha, matnlar, fayl, javoblar — hammasi saqlanadi) va faqat quyidagilarni qaytadan so'raydi:
+
+1. 📅 Sana
+2. 🕙 Boshlanish vaqti
+3. 🕧 Tugash vaqti
+4. 🔑 Yangi test kodi
+
+Keyin karta ko'rsatiladi va kerak bo'lsa **✏️ O'zgartirish** orqali boshqa narsalarni
+(masalan, yangi PDF yoki yangi javoblar) almashtirish mumkin.
+
+### 2.3. Test kodi — eng muhim qism 🔑
+
+* O'quvchi testga **faqat kod orqali** kiradi.
+* Har bir testning kodi **takrorlanmas** bo'lishi kerak — bot bir xil kodni ikki marta bermaydi.
+* Kod katta-kichik harfga sezgir emas: `mock002`, `MOCK002`, `Mock002` — bir xil.
+* Kod faqat lotin harflari, raqamlar, `-` va `_` dan iborat (2–32 belgi).
+* Kartadagi `@bot` havolasi ichida ham kod bor (`t.me/bot?start=mock002`) —
+  o'quvchi uni bossa, kod yozmasdan to'g'ridan-to'g'ri testga kiradi.
+
+### 2.4. Vaqt: boshlanish va tugash ⏰
+
+* **Boshlanish vaqtigacha** o'quvchi kodni yuborsa: *«Test hali boshlanmagan. Boshlanish vaqti: …»*.
+* **Boshlanish va tugash orasida** — test ochiq, javoblar qabul qilinadi.
+* **Tugash vaqtidan keyin** bot javob **qabul qilmaydi**: *«Test yakunlangan»*.
+  Hatto o'quvchi javobni yozib, «Ha» tugmasini kech bossa ham — qabul qilinmaydi.
+* Test tugashi bilan bot adminga avtomatik xabar yuboradi:
+  *«⏰ mock002 testi yakunlandi! Javob berganlar: 120 ta»* va **📊 Natijalarni ochish** tugmasi.
+
+### 2.5. 📋 Testlar — natijalar
+
+Barcha testlar ro'yxati (eng yangisi tepada). Har birining yonida holati:
+⏳ — hali boshlanmagan, 🟢 — davom etmoqda, 🔴 — yakunlangan; kodi, sanasi va nechta odam javob bergani.
+
+Test tanlanganda:
+
+* **O'quvchilar ro'yxati — avtomatik tartiblangan**: eng ko'p to'g'ri javob bergan tepada,
+  eng kami pastda. Har bir ism yonida natija:
+  ```
+  🥇 1. Valiyev Vali — 35/35
+  🥈 2. Aliyev Ali — 33/35
+  🥉 3. Karimova Malika — 30/35
+  4. ...
+  ```
+  (Natijasi teng bo'lsa — kim oldin yuborgan bo'lsa, o'sha yuqorida.)
   Natijasi yuborilgan o'quvchilar yonida 📨 belgisi turadi.
-* **O'quvchi ustiga bosilsa** — har bir savol bo'yicha batafsil:
+* **O'quvchi ismiga bosilsa** — batafsil: foiz, o'rni va har bir savol:
   ```
-  ✅ 1. C
-  ❌ 2. B (to'g'ri: A)
-  ✅ 3. B
+  ✅ 1. A
+  ❌ 2. B (to'g'ri: C)
+  ✅ 3. D
   ```
-* **📤 Natijalarni o'quvchilarga yuborish** — har bir o'quvchiga shaxsan natija boradi:
-  nechta to'g'ri javob bergani va qaysi savollarda xato qilgani.
-  Natija faqat hali yuborilmagan o'quvchilarga yuboriladi — keyinroq yangi o'quvchilar
-  javob bersa, tugmani yana bossangiz, faqat ularga boradi.
-* **🔗 Xona havolasi** — havolani qayta olish.
-* **📄 Testni ko'rish** — yuklangan test va to'g'ri javoblarni ko'rish.
-* **🗑 Xonani o'chirish** — xona va undagi barcha javoblarni o'chirish (tasdiqlash so'raladi).
-
-Har safar o'quvchi javob yuborganda o'qituvchiga darhol xabar keladi:
-`📥 11A Biologiya: Aliyev Ali javob yubordi — 8/10`.
-
-> Bir o'qituvchi faqat **o'zi yaratgan** xonalarni ko'radi.
+* **📤 Natijalarni o'quvchilarga yuborish** (ro'yxat oxirida) — har bir o'quvchiga shaxsan
+  **o'zining natijasi** boradi: nechta to'g'ri, foizi va qaysi savollarda xato qilgani.
+  Bu tugma **test tugagandan keyin** ishlaydi. Qayta bosilsa — faqat hali natija olmaganlarga yuboradi.
+* **👁 Kartani ko'rish** — kartani o'zingizga yuboradi (uni kanalga o'zingiz forward qilishingiz mumkin).
+* **📢 Kanalga joylash** — kartani to'g'ridan-to'g'ri kanalga joylaydi.
+  Buning uchun botni kanalga **admin** qilib qo'shish kerak.
+* **✏️ O'zgartirish** — saqlangan testning istalgan maydonini o'zgartirish
+  (sana, vaqt, kod, fayl, javoblar, matnlar). To'g'ri javoblar o'zgartirilsa —
+  barcha o'quvchilarning natijasi **avtomatik qayta hisoblanadi**.
+* **♻️ Nusxa olish** — shu test asosida yangi test yaratish (2.2-bo'limga qarang).
+* **🗑 O'chirish** — test va uning barcha natijalarini o'chirish (tasdiqlash so'raladi).
 
 ---
 
-## 4. O'quvchi 🎓
+## 3. O'quvchi 🎓
 
-1. O'quvchi o'qituvchi bergan havolani bosadi → Telegram botni ochadi → **Start** bosiladi.
-2. Bot: *«✅ Siz **11A Biologiya** xonasiga kirdingiz!»*
-3. Agar o'quvchi botdan birinchi marta foydalanayotgan bo'lsa, bot **ism va familiyasini** so'raydi
-   (o'qituvchi ro'yxatida aynan shu ism ko'rinadi). Keyingi testlarda qayta so'ralmaydi.
-4. Bot qoidani aytadi: savollar soni, **javoblarni bitta xabarda yuborish kerakligi** va namuna
-   (masalan `1A 2B 3C`). Shundan keyin darhol **testni yuboradi**.
-5. O'quvchi barcha javoblarni bitta xabarda yozadi:
-   ```
-   1A
-   2B
-   3C
-   ```
-6. Tushunmovchilik bo'lmasligi uchun bot o'quvchi yozgan javoblarni qaytarib ko'rsatadi va so'raydi:
-   *«Barcha javoblarni yubordingizmi va namunadagidek to'g'ri yozdingizmi?»*
-   Agar ba'zi savollarga javob yozilmagan bo'lsa, bot buni ham ogohlantiradi (*«Javobsiz savollar: 3»*).
-   * **✅ Ha** — javoblar o'qituvchiga yuboriladi. Endi javobni o'zgartirib bo'lmaydi.
-   * **❌ Yo'q** — o'quvchi javoblarni qaytadan yozadi.
-7. O'qituvchi **«Natijalarni yuborish»** bosgandan keyin o'quvchiga natija keladi:
-   ```
-   📊 11A Biologiya testi natijasi
-   Siz 10 ta savoldan 8 tasiga to'g'ri javob berdingiz.
-   ❌ Xato qilingan savollar:
-   2-savol (sizning javobingiz: B)
-   7-savol (sizning javobingiz: D)
-   ```
-   (To'g'ri javoblar o'quvchilarga ko'rsatilmaydi — boshqalarga tarqalib ketmasligi uchun.)
+1. O'quvchi kanalda kartani ko'radi va botga kiradi (yoki kartadagi `@bot` havolasini bosadi).
+2. Bot: *«Testga kirish uchun test kodini yuboring»*. O'quvchi kodni yozadi: `mock002`.
+3. Bot kodni tekshiradi:
+   * kod noto'g'ri — *«Bunday kodli test topilmadi»*;
+   * test hali boshlanmagan yoki tugagan — shu haqida aytadi;
+   * o'quvchi bu testga allaqachon javob bergan — *«Siz allaqachon javob yuborgansiz»*.
+4. Hammasi joyida bo'lsa: *«✅ Siz mock002 testiga kirdingiz!»*.
+5. Botdan birinchi marta foydalanayotgan o'quvchidan **ism-familiya** so'raladi
+   (adminning ro'yxatida aynan shu ism chiqadi). Keyingi testlarda qayta so'ralmaydi.
+   O'zgartirish uchun — `/ism` buyrug'i.
+6. Bot test faylini (PDF) yuboradi va qoidani aytadi: savollar soni, javoblarni
+   **bitta xabarda** yuborish kerakligi, **qaysi soatgacha** qabul qilinishi va namuna: `1A 2B 3C 4D`.
+7. O'quvchi barcha javoblarni bitta xabarda yozadi.
+8. Tushunmovchilik bo'lmasligi uchun bot o'quvchi yozgan javoblarni qaytarib ko'rsatadi va so'raydi:
+   *«Barcha javoblarni yubordingizmi va namunadagidek to'g'ri yozdingizmi?»* — **✅ Ha / ❌ Yo'q**.
+   Javobsiz qolgan savollar bo'lsa, bot buni ham ogohlantiradi.
+9. «Ha» bosilgach: *«✅ Javoblaringiz qabul qilindi! Natijangiz test tugagandan keyin yuboriladi»*.
+10. Admin «Natijalarni yuborish» bosgach, o'quvchiga natija keladi:
+    ```
+    📊 mock002 testi natijasi
+    Siz 35 ta savoldan 30 tasiga to'g'ri javob berdingiz (85.7%).
+    ❌ Xato qilingan savollar:
+    4-savol (sizning javobingiz: B)
+    ...
+    ```
+    (To'g'ri javoblar o'quvchilarga ko'rsatilmaydi.)
 
-Bitta o'quvchi bitta xonaga **faqat bir marta** javob yubora oladi.
+Bitta o'quvchi bitta testga **faqat bir marta** javob yubora oladi.
 
 ---
 
-## 5. Javoblar qanday tekshiriladi?
+## 4. Javoblar qanday tekshiriladi?
 
-Bot matndan **«raqam + harf»** juftliklarini qidiradi. Quyidagi yozuvlarning hammasi tushuniladi:
+Bot matndan **«raqam + harf»** juftliklarini qidiradi. Quyidagilarning hammasi tushuniladi:
 
 ```
 1A 2B 3C
@@ -177,60 +225,57 @@ Bot matndan **«raqam + harf»** juftliklarini qidiradi. Quyidagi yozuvlarning h
 1)A 2.B 3:C
 1A2B3C
 ```
+yoki har bir javob alohida qatorda.
 
 * Katta-kichik harf farq qilmaydi (`1a` = `1A`).
-* Kirill harflari lotinchaga aylantiriladi: **А→A, Б→B, С→C, Д→D, Е→E**.
-  Ya'ni o'quvchi `1А 2Б 3С` (kirillda) yozsa ham, o'qituvchi `1 A 2 B 3 C` (lotinda) yozgan
-  javoblar bilan to'g'ri solishtiriladi.
-* Agar bitta savol ikki marta yozilsa, oxirgisi hisobga olinadi.
+* Kirill harflari lotinchaga aylantiriladi: **А→A, Б→B, С→C, Д→D, Е→E**
+  (o'quvchi `1А 2Б` deb kirillda yozsa ham to'g'ri tekshiriladi).
+* Bitta savol ikki marta yozilsa — oxirgisi hisobga olinadi.
 * Javob yozilmagan savol — xato hisoblanadi.
+* Natija = to'g'ri javoblar soni / jami savollar soni va foizi.
 
 ---
 
-## 6. Loyiha tuzilishi (dasturchilar uchun)
+## 5. Loyiha tuzilishi (dasturchilar uchun)
 
 ```
 test-bot/
 ├── .env.example          — sozlamalar namunasi
-├── requirements.txt      — kerakli kutubxonalar (aiogram 3, aiosqlite, python-dotenv)
+├── requirements.txt      — kutubxonalar (aiogram 3, aiosqlite, python-dotenv, tzdata)
 └── bot/
     ├── main.py           — botni ishga tushiruvchi fayl
     ├── config.py         — .env dan sozlamalarni o'qish
-    ├── db.py             — SQLite ma'lumotlar bazasi bilan ishlash
+    ├── db.py             — SQLite ma'lumotlar bazasi
     ├── answers.py        — javoblarni matndan ajratish va tekshirish
-    ├── texts.py          — botning BARCHA matnlari (tilni shu yerda o'zgartirasiz)
+    ├── form.py           — test maydonlari: savollari va tekshiruvi
+    ├── card.py           — kanal kartasini yasash va yuborish
+    ├── timeutils.py      — sana/vaqt, test holati (boshlanmagan/ochiq/tugagan)
+    ├── scheduler.py      — test tugaganda adminga xabar beruvchi fon vazifasi
+    ├── texts.py          — botning barcha matnlari
     ├── keyboards.py      — tugmalar
-    ├── filters.py        — rollarni tekshirish (direktor / o'qituvchi)
-    ├── utils.py          — yordamchi funksiyalar (havolalar, test yuborish)
+    ├── filters.py        — adminni aniqlash
+    ├── utils.py          — yordamchi funksiyalar
     └── handlers/
-        ├── common.py     — /start, havolalarni qabul qilish, bekor qilish
-        ├── director.py   — direktor paneli
-        ├── teacher.py    — xona yaratish va natijalar
-        └── student.py    — o'quvchining testga kirishi va javob yuborishi
+        ├── common.py     — /start, /cancel, /ism
+        ├── admin.py      — admin paneli: test yaratish, tahrirlash, natijalar
+        └── student.py    — o'quvchi: kod, ism, javob yuborish
 ```
 
 ### Ma'lumotlar bazasi (`bot.db`)
 
 | Jadval | Nima saqlanadi |
 |--------|----------------|
-| `users` | Botdan foydalangan hamma: Telegram ismi, username, o'quvchi kiritgan ism-familiya |
-| `teachers` | O'qituvchi roli berilganlar |
-| `teacher_invites` | Direktor yaratgan taklif havolalari (ishlatilganmi yoki yo'qmi) |
-| `rooms` | Xonalar: nomi, egasi (o'qituvchi), javob namunasi, to'g'ri javoblar |
-| `room_materials` | Test materiallari (matn, rasm, fayl) |
-| `submissions` | O'quvchilar javoblari, to'g'ri javoblar soni, natija yuborilganmi |
-
-### Havolalar qanday ishlaydi?
-Telegram'ning *deep link* imkoniyatidan foydalaniladi: `https://t.me/BOT?start=XXX`.
-Havola bosilganda bot `/start XXX` buyrug'ini oladi:
-* `teacher_...` bilan boshlansa — o'qituvchi taklifnomasi;
-* `room_...` bilan boshlansa — xonaga kirish.
-
-Havoladagi kodlar tasodifiy va uzun, shuning uchun ularni topib (taxmin qilib) bo'lmaydi.
+| `users` | Botdan foydalanganlar va o'quvchilar kiritgan ism-familiya |
+| `settings` | Bir marta kiritiladigan sozlamalar (kanal) |
+| `tests` | Testlar: kod, karta matnlari, sana, boshlanish/tugash vaqti, fayl, to'g'ri javoblar |
+| `test_results` | O'quvchilar javoblari, to'g'ri javoblar soni, natija yuborilganmi |
 
 ### Muhim eslatmalar
-* Bot qayta ishga tushirilsa, **jarayon o'rtasidagi** holatlar (masalan, xona yaratayotgan
-  o'qituvchi yoki javob yozayotgan o'quvchi) unutiladi — `/start` bosib, qaytadan boshlash kerak.
-  Yaratilgan xonalar, o'qituvchilar va yuborilgan javoblar esa bazada saqlanib qoladi.
-* `bot.db` faylini vaqti-vaqti bilan zaxira nusxasini oling — barcha ma'lumotlar shu faylda.
-* Botning tilini o'zgartirish uchun faqat `bot/texts.py` faylini tahrirlash kifoya.
+* Bot qayta ishga tushirilsa, **jarayon o'rtasidagi** holatlar (masalan, test yaratayotgan admin
+  yoki javob yozayotgan o'quvchi) unutiladi — `/start` bosib qaytadan boshlash kerak.
+  Saqlangan testlar, sozlamalar va yuborilgan javoblar bazada qoladi.
+* `bot.db` faylining zaxira nusxasini vaqti-vaqti bilan oling — barcha ma'lumotlar shu faylda.
+* Botning matnlarini o'zgartirish uchun `bot/texts.py`, karta ko'rinishini o'zgartirish uchun
+  `bot/card.py` faylini tahrirlang.
+* Bot hozircha faqat **harfli javoblarni** (A, B, C, D …) tekshiradi. Natija «to'g'ri/jami»
+  ko'rinishida hisoblanadi (RASH ball emas).

@@ -1,8 +1,8 @@
 from aiogram import Router
 
-from . import common, director, student, teacher
+from . import admin, common, student
 
 
 def get_routers() -> list[Router]:
-    # Tartib muhim: common (/start va bekor qilish) birinchi bo'lishi kerak
-    return [common.router, director.router, teacher.router, student.router]
+    # Tartib muhim: common (/start va bekor qilish) birinchi, o'quvchi — oxirida
+    return [common.router, admin.router, student.router]

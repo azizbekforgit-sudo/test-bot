@@ -1,9 +1,10 @@
 import json
-import secrets
 from dataclasses import dataclass
 from datetime import datetime
 
 import aiosqlite
+
+from .answers import count_correct
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -14,41 +15,33 @@ CREATE TABLE IF NOT EXISTS users (
     created_at  TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS teachers (
-    user_id     INTEGER PRIMARY KEY,
-    added_by    INTEGER,
-    added_at    TEXT NOT NULL
+-- Bir marta kiritiladigan sozlamalar (kanal havolasi va h.k.)
+CREATE TABLE IF NOT EXISTS settings (
+    key     TEXT PRIMARY KEY,
+    value   TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS teacher_invites (
-    token       TEXT PRIMARY KEY,
-    created_by  INTEGER NOT NULL,
-    created_at  TEXT NOT NULL,
-    used_by     INTEGER,
-    used_at     TEXT
-);
-
-CREATE TABLE IF NOT EXISTS rooms (
+CREATE TABLE IF NOT EXISTS tests (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    code            TEXT UNIQUE NOT NULL,
-    teacher_id      INTEGER NOT NULL,
-    name            TEXT NOT NULL,
-    answer_example  TEXT NOT NULL,
-    correct_answers TEXT NOT NULL,   -- JSON: {"1": "A", "2": "B"}
+    code            TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    title           TEXT NOT NULL,
+    subject         TEXT NOT NULL DEFAULT '',
+    hashtags        TEXT NOT NULL DEFAULT '',
+    subtitle        TEXT NOT NULL DEFAULT '',
+    footer          TEXT NOT NULL DEFAULT '',
+    date            TEXT NOT NULL,     -- KK.OO.YYYY
+    start_time      TEXT NOT NULL,     -- SS:DD
+    end_time        TEXT NOT NULL,     -- SS:DD
+    file_kind       TEXT,              -- document | photo | NULL
+    file_id         TEXT,
+    correct_answers TEXT NOT NULL,     -- JSON: {"1": "A", "2": "B"}
+    end_notified    INTEGER NOT NULL DEFAULT 0,
     created_at      TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS room_materials (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    room_id     INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
-    kind        TEXT NOT NULL,       -- text | photo | document
-    file_id     TEXT,
-    text        TEXT
-);
-
-CREATE TABLE IF NOT EXISTS submissions (
+CREATE TABLE IF NOT EXISTS test_results (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    room_id       INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+    test_id       INTEGER NOT NULL REFERENCES tests(id) ON DELETE CASCADE,
     student_id    INTEGER NOT NULL,
     student_name  TEXT NOT NULL,
     answers       TEXT NOT NULL,     -- JSON: {"1": "A", "2": "C"}
@@ -56,9 +49,15 @@ CREATE TABLE IF NOT EXISTS submissions (
     total         INTEGER NOT NULL,
     submitted_at  TEXT NOT NULL,
     result_sent   INTEGER NOT NULL DEFAULT 0,
-    UNIQUE (room_id, student_id)
+    UNIQUE (test_id, student_id)
 );
 """
+
+# Testning foydalanuvchi tahrirlay oladigan maydonlari
+TEST_FIELDS = (
+    "code", "title", "subject", "hashtags", "subtitle", "footer",
+    "date", "start_time", "end_time", "file_kind", "file_id", "correct_answers",
+)
 
 
 def _now() -> str:
@@ -66,27 +65,31 @@ def _now() -> str:
 
 
 @dataclass
-class Room:
+class Test:
     id: int
     code: str
-    teacher_id: int
-    name: str
-    answer_example: str
+    title: str
+    subject: str
+    hashtags: str
+    subtitle: str
+    footer: str
+    date: str
+    start_time: str
+    end_time: str
+    file_kind: str | None
+    file_id: str | None
     correct_answers: dict[str, str]
+    end_notified: bool
     created_at: str
 
-
-@dataclass
-class Material:
-    kind: str
-    file_id: str | None
-    text: str | None
+    def to_draft(self) -> dict:
+        return {f: getattr(self, f) for f in TEST_FIELDS}
 
 
 @dataclass
-class Submission:
+class Result:
     id: int
-    room_id: int
+    test_id: int
     student_id: int
     student_name: str
     answers: dict[str, str]
@@ -96,30 +99,18 @@ class Submission:
     result_sent: bool
 
 
-def _room(row) -> Room:
-    return Room(
-        id=row["id"],
-        code=row["code"],
-        teacher_id=row["teacher_id"],
-        name=row["name"],
-        answer_example=row["answer_example"],
-        correct_answers=json.loads(row["correct_answers"]),
-        created_at=row["created_at"],
-    )
+def _test(row) -> Test:
+    d = dict(row)
+    d["correct_answers"] = json.loads(d["correct_answers"])
+    d["end_notified"] = bool(d["end_notified"])
+    return Test(**d)
 
 
-def _submission(row) -> Submission:
-    return Submission(
-        id=row["id"],
-        room_id=row["room_id"],
-        student_id=row["student_id"],
-        student_name=row["student_name"],
-        answers=json.loads(row["answers"]),
-        correct_count=row["correct_count"],
-        total=row["total"],
-        submitted_at=row["submitted_at"],
-        result_sent=bool(row["result_sent"]),
-    )
+def _result(row) -> Result:
+    d = dict(row)
+    d["answers"] = json.loads(d["answers"])
+    d["result_sent"] = bool(d["result_sent"])
+    return Result(**d)
 
 
 class Database:
@@ -156,135 +147,114 @@ class Database:
         return row["full_name"] if row else None
 
     async def set_full_name(self, user_id: int, full_name: str) -> None:
-        await self.conn.execute("UPDATE users SET full_name = ? WHERE user_id = ?", (full_name, user_id))
+        await self.conn.execute(
+            """
+            INSERT INTO users (user_id, full_name, created_at) VALUES (?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET full_name = excluded.full_name
+            """,
+            (user_id, full_name, _now()),
+        )
         await self.conn.commit()
 
-    # ---------- o'qituvchilar ----------
+    # ---------- sozlamalar ----------
 
-    async def is_teacher(self, user_id: int) -> bool:
-        cur = await self.conn.execute("SELECT 1 FROM teachers WHERE user_id = ?", (user_id,))
+    async def get_setting(self, key: str) -> str | None:
+        cur = await self.conn.execute("SELECT value FROM settings WHERE key = ?", (key,))
+        row = await cur.fetchone()
+        return row["value"] if row else None
+
+    async def set_setting(self, key: str, value: str) -> None:
+        await self.conn.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, value),
+        )
+        await self.conn.commit()
+
+    # ---------- testlar ----------
+
+    async def create_test(self, draft: dict) -> Test:
+        values = {f: draft.get(f) for f in TEST_FIELDS}
+        values["correct_answers"] = json.dumps(values["correct_answers"])
+        for f in ("subject", "hashtags", "subtitle", "footer"):
+            values[f] = values[f] or ""
+        cols = ", ".join(values)
+        marks = ", ".join("?" for _ in values)
+        cur = await self.conn.execute(
+            f"INSERT INTO tests ({cols}, created_at) VALUES ({marks}, ?)",
+            (*values.values(), _now()),
+        )
+        await self.conn.commit()
+        return await self.get_test(cur.lastrowid)
+
+    async def update_test(self, test_id: int, **fields) -> None:
+        assert set(fields) <= set(TEST_FIELDS) | {"end_notified"}
+        if "correct_answers" in fields:
+            fields["correct_answers"] = json.dumps(fields["correct_answers"])
+        sets = ", ".join(f"{k} = ?" for k in fields)
+        await self.conn.execute(f"UPDATE tests SET {sets} WHERE id = ?", (*fields.values(), test_id))
+        await self.conn.commit()
+
+    async def get_test(self, test_id: int) -> Test | None:
+        cur = await self.conn.execute("SELECT * FROM tests WHERE id = ?", (test_id,))
+        row = await cur.fetchone()
+        return _test(row) if row else None
+
+    async def get_test_by_code(self, code: str) -> Test | None:
+        cur = await self.conn.execute("SELECT * FROM tests WHERE code = ?", (code.strip(),))
+        row = await cur.fetchone()
+        return _test(row) if row else None
+
+    async def code_taken(self, code: str, exclude_id: int | None = None) -> bool:
+        cur = await self.conn.execute(
+            "SELECT 1 FROM tests WHERE code = ? AND id != ?", (code, exclude_id or 0)
+        )
         return await cur.fetchone() is not None
 
-    async def add_teacher(self, user_id: int, added_by: int) -> None:
-        await self.conn.execute(
-            "INSERT OR IGNORE INTO teachers (user_id, added_by, added_at) VALUES (?, ?, ?)",
-            (user_id, added_by, _now()),
-        )
-        await self.conn.commit()
-
-    async def remove_teacher(self, user_id: int) -> bool:
-        cur = await self.conn.execute("DELETE FROM teachers WHERE user_id = ?", (user_id,))
-        await self.conn.commit()
-        return cur.rowcount > 0
-
-    async def list_teachers(self) -> list[dict]:
+    async def list_tests(self) -> list[tuple[Test, int]]:
         cur = await self.conn.execute(
             """
-            SELECT t.user_id, t.added_at, u.tg_name, u.username,
-                   (SELECT COUNT(*) FROM rooms r WHERE r.teacher_id = t.user_id) AS rooms_count
-            FROM teachers t LEFT JOIN users u ON u.user_id = t.user_id
-            ORDER BY t.added_at
+            SELECT t.*, (SELECT COUNT(*) FROM test_results r WHERE r.test_id = t.id) AS cnt
+            FROM tests t ORDER BY t.id DESC
             """
         )
-        return [dict(r) for r in await cur.fetchall()]
+        rows = await cur.fetchall()
+        return [(_test({k: r[k] for k in r.keys() if k != "cnt"}), r["cnt"]) for r in rows]
 
-    async def create_teacher_invite(self, created_by: int) -> str:
-        token = secrets.token_urlsafe(12)
-        await self.conn.execute(
-            "INSERT INTO teacher_invites (token, created_by, created_at) VALUES (?, ?, ?)",
-            (token, created_by, _now()),
-        )
+    async def unnotified_tests(self) -> list[Test]:
+        cur = await self.conn.execute("SELECT * FROM tests WHERE end_notified = 0")
+        return [_test(r) for r in await cur.fetchall()]
+
+    async def delete_test(self, test_id: int) -> None:
+        await self.conn.execute("DELETE FROM tests WHERE id = ?", (test_id,))
         await self.conn.commit()
-        return token
 
-    async def use_teacher_invite(self, token: str, user_id: int) -> int | None:
-        """Taklifnomani ishlatadi. Muvaffaqiyatli bo'lsa direktor ID sini qaytaradi."""
+    async def recalc_results(self, test_id: int, correct: dict[str, str]) -> None:
+        """To'g'ri javoblar o'zgartirilganda barcha natijalarni qayta hisoblaydi."""
+        for r in await self.list_results(test_id):
+            await self.conn.execute(
+                "UPDATE test_results SET correct_count = ?, total = ? WHERE id = ?",
+                (count_correct(correct, r.answers), len(correct), r.id),
+            )
+        await self.conn.commit()
+
+    # ---------- natijalar ----------
+
+    async def get_result(self, test_id: int, student_id: int) -> Result | None:
         cur = await self.conn.execute(
-            "SELECT created_by FROM teacher_invites WHERE token = ? AND used_by IS NULL", (token,)
+            "SELECT * FROM test_results WHERE test_id = ? AND student_id = ?", (test_id, student_id)
         )
         row = await cur.fetchone()
-        if not row:
-            return None
-        await self.conn.execute(
-            "UPDATE teacher_invites SET used_by = ?, used_at = ? WHERE token = ?",
-            (user_id, _now(), token),
-        )
-        await self.add_teacher(user_id, row["created_by"])
-        return row["created_by"]
+        return _result(row) if row else None
 
-    # ---------- xonalar ----------
+    async def get_result_by_id(self, result_id: int) -> Result | None:
+        cur = await self.conn.execute("SELECT * FROM test_results WHERE id = ?", (result_id,))
+        row = await cur.fetchone()
+        return _result(row) if row else None
 
-    async def create_room(
+    async def add_result(
         self,
-        teacher_id: int,
-        name: str,
-        answer_example: str,
-        correct_answers: dict[str, str],
-        materials: list[dict],
-    ) -> Room:
-        code = secrets.token_urlsafe(8)
-        cur = await self.conn.execute(
-            """
-            INSERT INTO rooms (code, teacher_id, name, answer_example, correct_answers, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (code, teacher_id, name, answer_example, json.dumps(correct_answers), _now()),
-        )
-        room_id = cur.lastrowid
-        await self.conn.executemany(
-            "INSERT INTO room_materials (room_id, kind, file_id, text) VALUES (?, ?, ?, ?)",
-            [(room_id, m["kind"], m.get("file_id"), m.get("text")) for m in materials],
-        )
-        await self.conn.commit()
-        return await self.get_room(room_id)
-
-    async def get_room(self, room_id: int) -> Room | None:
-        cur = await self.conn.execute("SELECT * FROM rooms WHERE id = ?", (room_id,))
-        row = await cur.fetchone()
-        return _room(row) if row else None
-
-    async def get_room_by_code(self, code: str) -> Room | None:
-        cur = await self.conn.execute("SELECT * FROM rooms WHERE code = ?", (code,))
-        row = await cur.fetchone()
-        return _room(row) if row else None
-
-    async def list_rooms(self, teacher_id: int) -> list[tuple[Room, int]]:
-        cur = await self.conn.execute(
-            """
-            SELECT r.*, (SELECT COUNT(*) FROM submissions s WHERE s.room_id = r.id) AS cnt
-            FROM rooms r WHERE r.teacher_id = ? ORDER BY r.id DESC
-            """,
-            (teacher_id,),
-        )
-        return [(_room(r), r["cnt"]) for r in await cur.fetchall()]
-
-    async def delete_room(self, room_id: int) -> None:
-        await self.conn.execute("DELETE FROM rooms WHERE id = ?", (room_id,))
-        await self.conn.commit()
-
-    async def get_materials(self, room_id: int) -> list[Material]:
-        cur = await self.conn.execute(
-            "SELECT kind, file_id, text FROM room_materials WHERE room_id = ? ORDER BY id", (room_id,)
-        )
-        return [Material(r["kind"], r["file_id"], r["text"]) for r in await cur.fetchall()]
-
-    # ---------- javoblar ----------
-
-    async def get_submission(self, room_id: int, student_id: int) -> Submission | None:
-        cur = await self.conn.execute(
-            "SELECT * FROM submissions WHERE room_id = ? AND student_id = ?", (room_id, student_id)
-        )
-        row = await cur.fetchone()
-        return _submission(row) if row else None
-
-    async def get_submission_by_id(self, submission_id: int) -> Submission | None:
-        cur = await self.conn.execute("SELECT * FROM submissions WHERE id = ?", (submission_id,))
-        row = await cur.fetchone()
-        return _submission(row) if row else None
-
-    async def add_submission(
-        self,
-        room_id: int,
+        test_id: int,
         student_id: int,
         student_name: str,
         answers: dict[str, str],
@@ -294,23 +264,23 @@ class Database:
         """Javobni saqlaydi. O'quvchi avval topshirgan bo'lsa False qaytaradi."""
         cur = await self.conn.execute(
             """
-            INSERT OR IGNORE INTO submissions
-                (room_id, student_id, student_name, answers, correct_count, total, submitted_at)
+            INSERT OR IGNORE INTO test_results
+                (test_id, student_id, student_name, answers, correct_count, total, submitted_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (room_id, student_id, student_name, json.dumps(answers), correct_count, total, _now()),
+            (test_id, student_id, student_name, json.dumps(answers), correct_count, total, _now()),
         )
         await self.conn.commit()
         return cur.rowcount > 0
 
-    async def list_submissions(self, room_id: int) -> list[Submission]:
+    async def list_results(self, test_id: int) -> list[Result]:
+        """Natijalar: eng ko'p to'g'ri javob berganidan eng kamiga qarab tartiblangan."""
         cur = await self.conn.execute(
-            "SELECT * FROM submissions WHERE room_id = ? ORDER BY correct_count DESC, submitted_at",
-            (room_id,),
+            "SELECT * FROM test_results WHERE test_id = ? ORDER BY correct_count DESC, submitted_at",
+            (test_id,),
         )
-        return [_submission(r) for r in await cur.fetchall()]
+        return [_result(r) for r in await cur.fetchall()]
 
-    async def mark_result_sent(self, submission_id: int) -> None:
-        await self.conn.execute("UPDATE submissions SET result_sent = 1 WHERE id = ?", (submission_id,))
+    async def mark_result_sent(self, result_id: int) -> None:
+        await self.conn.execute("UPDATE test_results SET result_sent = 1 WHERE id = ?", (result_id,))
         await self.conn.commit()
-

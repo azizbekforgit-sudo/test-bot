@@ -10,6 +10,7 @@ from aiogram.types import BotCommand
 from .config import config
 from .db import Database
 from .handlers import get_routers
+from .scheduler import watch_test_endings
 
 
 async def main() -> None:
@@ -28,13 +29,16 @@ async def main() -> None:
 
     await bot.set_my_commands([
         BotCommand(command="start", description="Bosh menyu"),
+        BotCommand(command="ism", description="Ism-familiyani o'zgartirish"),
         BotCommand(command="cancel", description="Bekor qilish"),
     ])
 
     logging.info("Bot ishga tushdi: @%s", me.username)
+    watcher = asyncio.create_task(watch_test_endings(bot, db))
     try:
         await dp.start_polling(bot)
     finally:
+        watcher.cancel()
         await db.close()
         await bot.session.close()
 
