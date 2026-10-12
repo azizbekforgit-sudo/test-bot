@@ -22,6 +22,18 @@ def channel_username(channel: str | None) -> str | None:
     return m.group(1) if m else None
 
 
+def find_channel(text: str | None, bot_username: str | None = None) -> str | None:
+    """Matndan kanal nomini topadi. Admin butun kartani yuborsa ham ishlaydi:
+    matndagi oxirgi @nom yoki t.me/nom olinadi (botning o'z nomi hisobga olinmaydi)."""
+    skip = {"share", (bot_username or "").lower()}
+    exact = channel_username(text)
+    if exact:
+        return exact if exact.lower() not in skip else None
+    found = re.findall(r"(?:t\.me/|telegram\.me/|@)([A-Za-z][A-Za-z0-9_]{3,31})\b", text or "")
+    found = [x for x in found if x.lower() not in skip]
+    return found[-1] if found else None
+
+
 def build_card(d: dict, bot_username: str, channel: str | None, blank: bool = False) -> str:
     """Kartani HTML ko'rinishida yasaydi. blank=True bo'lsa bo'sh joylar chiziqcha bilan to'ldiriladi."""
 

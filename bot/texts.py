@@ -34,11 +34,15 @@ CANCELLED = "Bekor qilindi."
 ASK_CHANNEL = (
     "📢 Telegram <b>kanalingizni</b> kiriting (bir marta so'raladi, keyin bot eslab qoladi).\n"
     "U kartaning pastida ko'rsatiladi va «📢 Kanalga joylash» tugmasi shu kanalga yuboradi.\n\n"
-    "Masalan: <code>@xodiyevacademy</code>\n\n"
+    "Faqat kanal nomini yuboring. Masalan: <code>@xodiyevacademy</code>\n"
+    "(Kartaning qolgan qismini bot keyin birma-bir so'raydi.)\n\n"
     "Kanal kerak bo'lmasa — <code>-</code> yuboring."
 )
 CHANNEL_BAD = "❌ Kanalni tushunmadim. Masalan: <code>@kanal_nomi</code> yoki <code>-</code>"
-CHANNEL_SAVED = "✅ Saqlandi. Kanal: {channel}"
+CHANNEL_SAVED = (
+    "✅ Saqlandi. Kanal: {channel}\n"
+    "Noto'g'ri bo'lsa — «⚙️ Sozlamalar» bo'limida o'zgartirishingiz mumkin."
+)
 SETTINGS_VIEW = (
     "⚙️ <b>Sozlamalar</b>\n\n"
     "📢 Kanal: {channel}\n"

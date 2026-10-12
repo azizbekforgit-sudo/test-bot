@@ -11,7 +11,7 @@ from .. import form
 from .. import keyboards as kb
 from .. import texts as t
 from ..answers import format_answers, grade
-from ..card import build_card, channel_username, send_card
+from ..card import build_card, find_channel, send_card
 from ..db import Database, Test
 from ..filters import IsAdmin
 from ..timeutils import FINISHED, status_of
@@ -82,12 +82,12 @@ async def change_channel(call: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.message(Form.channel, F.text)
-async def got_channel(message: Message, state: FSMContext, db: Database) -> None:
+async def got_channel(message: Message, state: FSMContext, db: Database, bot_username: str) -> None:
     text = message.text.strip()
     if text == "-":
         value = ""
     else:
-        username = channel_username(text)
+        username = find_channel(text, bot_username)
         if not username:
             await message.answer(t.CHANNEL_BAD)
             return
