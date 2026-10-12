@@ -12,7 +12,12 @@ class Config:
     bot_token: str
     admin_ids: frozenset[int]
     db_path: str
+    database_url: str | None
     tz: ZoneInfo
+    # Webhook rejimi (serverda): bot shu manzilda Telegramdan xabar qabul qiladi
+    webhook_base: str | None
+    webhook_secret: str
+    port: int
 
 
 def load_config() -> Config:
@@ -29,7 +34,12 @@ def load_config() -> Config:
         bot_token=token,
         admin_ids=admin_ids,
         db_path=os.getenv("DB_PATH", "bot.db"),
+        database_url=os.getenv("DATABASE_URL") or None,
         tz=ZoneInfo(os.getenv("TIMEZONE", "Asia/Tashkent")),
+        # Render o'zi RENDER_EXTERNAL_URL ni beradi; boshqa hostingda WEBHOOK_URL yoziladi
+        webhook_base=(os.getenv("WEBHOOK_URL") or os.getenv("RENDER_EXTERNAL_URL") or "").rstrip("/") or None,
+        webhook_secret=os.getenv("WEBHOOK_SECRET") or token.split(":")[-1][-20:],
+        port=int(os.getenv("PORT", "8080")),
     )
 
 

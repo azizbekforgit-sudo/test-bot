@@ -52,7 +52,37 @@ python -m bot.main
 ```
 
 Terminalda `Bot ishga tushdi: @sizning_bot` chiqsa — bot ishlayapti ✅.
-Bot doim ishlab turishi uchun uni serverda (VPS) yoki hostingda (Render, Railway va h.k.) ishga tushiring.
+Kompyuterda bot **polling** rejimida ishlaydi va ma'lumotlar `bot.db` (SQLite) fayliga yoziladi.
+
+### 1.5. Serverga joylash (Render + Neon)
+
+Bot doim ishlab turishi uchun u **Render** da joylashtirilgan:
+
+* **Render Web Service** (bepul tarif) — botning o'zi.
+  * Build: `pip install -r requirements.txt`
+  * Start: `python -m bot.main`
+  * Render `RENDER_EXTERNAL_URL` ni o'zi beradi — bot buni ko'rib **webhook** rejimiga o'tadi:
+    Telegram xabarlarni botga HTTP orqali yuboradi. Bepul tarifda bot 15 daqiqa ishlatilmasa
+    "uxlab qoladi", lekin birinchi xabar kelganda o'zi uyg'onadi (≈30–60 soniya).
+* **Neon PostgreSQL** (bepul) — ma'lumotlar bazasi. Render'ning bepul serverida fayllar
+  har qayta ishga tushganda o'chib ketadi, shuning uchun ma'lumotlar Neon'da saqlanadi.
+
+Render'dagi muhit o'zgaruvchilari (Environment):
+
+| O'zgaruvchi | Qiymat |
+|-------------|--------|
+| `BOT_TOKEN` | BotFather tokeni |
+| `ADMIN_IDS` | Admin(lar) Telegram ID si |
+| `DATABASE_URL` | Neon ulanish havolasi (`postgresql://...?sslmode=require`) |
+| `TIMEZONE` | `Asia/Tashkent` |
+| `PYTHON_VERSION` | `3.12.8` |
+| `WEBHOOK_SECRET` | ixtiyoriy maxfiy so'z (Telegram so'rovlarini tekshirish uchun) |
+
+Kodni GitHub'dagi tarmoqqa (branch) push qilsangiz, Render botni **avtomatik** qayta joylaydi.
+
+⚠️ Bot serverda ishlayotganda uni kompyuterda **bir vaqtda** ishga tushirmang: kompyuterdagi bot
+webhook'ni o'chirib qo'yadi va serverdagi bot xabar olmay qoladi. Shunday bo'lib qolsa —
+Render'da botni qayta ishga tushiring (Manual Deploy → Restart).
 
 > Agar avval botning eski versiyasi (xonalar bilan) ishlatilgan bo'lsa, eski `bot.db` faylini
 > o'chirib yuborish tavsiya etiladi.
@@ -241,11 +271,11 @@ yoki har bir javob alohida qatorda.
 ```
 test-bot/
 ├── .env.example          — sozlamalar namunasi
-├── requirements.txt      — kutubxonalar (aiogram 3, aiosqlite, python-dotenv, tzdata)
+├── requirements.txt      — kutubxonalar (aiogram 3, aiosqlite, asyncpg, python-dotenv, tzdata)
 └── bot/
-    ├── main.py           — botni ishga tushiruvchi fayl
+    ├── main.py           — botni ishga tushiruvchi fayl (polling yoki webhook)
     ├── config.py         — .env dan sozlamalarni o'qish
-    ├── db.py             — SQLite ma'lumotlar bazasi
+    ├── db.py             — ma'lumotlar bazasi (SQLite yoki PostgreSQL)
     ├── answers.py        — javoblarni matndan ajratish va tekshirish
     ├── form.py           — test maydonlari: savollari va tekshiruvi
     ├── card.py           — kanal kartasini yasash va yuborish
@@ -261,7 +291,7 @@ test-bot/
         └── student.py    — o'quvchi: kod, ism, javob yuborish
 ```
 
-### Ma'lumotlar bazasi (`bot.db`)
+### Ma'lumotlar bazasi (kompyuterda `bot.db`, serverda Neon PostgreSQL)
 
 | Jadval | Nima saqlanadi |
 |--------|----------------|
@@ -274,7 +304,7 @@ test-bot/
 * Bot qayta ishga tushirilsa, **jarayon o'rtasidagi** holatlar (masalan, test yaratayotgan admin
   yoki javob yozayotgan o'quvchi) unutiladi — `/start` bosib qaytadan boshlash kerak.
   Saqlangan testlar, sozlamalar va yuborilgan javoblar bazada qoladi.
-* `bot.db` faylining zaxira nusxasini vaqti-vaqti bilan oling — barcha ma'lumotlar shu faylda.
+* Kompyuterda ishlatilsa, `bot.db` faylining zaxira nusxasini vaqti-vaqti bilan oling.
 * Botning matnlarini o'zgartirish uchun `bot/texts.py`, karta ko'rinishini o'zgartirish uchun
   `bot/card.py` faylini tahrirlang.
 * Bot hozircha faqat **harfli javoblarni** (A, B, C, D …) tekshiradi. Natija «to'g'ri/jami»

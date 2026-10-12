@@ -1,14 +1,19 @@
+"""Ma'lumotlar bazasi.
+
+DATABASE_URL berilgan bo'lsa — PostgreSQL (serverda, masalan Neon/Render),
+aks holda — SQLite fayli (kompyuterda ishga tushirish uchun).
+"""
+
 import json
+import re
 from dataclasses import dataclass
-from datetime import datetime
 
-import aiosqlite
-
+from . import timeutils
 from .answers import count_correct
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
-    user_id     INTEGER PRIMARY KEY,
+    user_id     BIGINT PRIMARY KEY,
     tg_name     TEXT,
     username    TEXT,
     full_name   TEXT,              -- o'quvchi o'zi kiritgan ism-familiya
@@ -22,8 +27,8 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 
 CREATE TABLE IF NOT EXISTS tests (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    code            TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    id              {ID},
+    code            TEXT NOT NULL,
     title           TEXT NOT NULL,
     subject         TEXT NOT NULL DEFAULT '',
     hashtags        TEXT NOT NULL DEFAULT '',
@@ -39,10 +44,13 @@ CREATE TABLE IF NOT EXISTS tests (
     created_at      TEXT NOT NULL
 );
 
+-- Test kodi takrorlanmas va katta-kichik harfga sezgir emas
+CREATE UNIQUE INDEX IF NOT EXISTS tests_code_uniq ON tests (lower(code));
+
 CREATE TABLE IF NOT EXISTS test_results (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    test_id       INTEGER NOT NULL REFERENCES tests(id) ON DELETE CASCADE,
-    student_id    INTEGER NOT NULL,
+    id            {ID},
+    test_id       BIGINT NOT NULL REFERENCES tests(id) ON DELETE CASCADE,
+    student_id    BIGINT NOT NULL,
     student_name  TEXT NOT NULL,
     answers       TEXT NOT NULL,     -- JSON: {"1": "A", "2": "C"}
     correct_count INTEGER NOT NULL,
@@ -61,7 +69,7 @@ TEST_FIELDS = (
 
 
 def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    return timeutils.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 @dataclass
@@ -99,8 +107,11 @@ class Result:
     result_sent: bool
 
 
+_TEST_COLS = ("id", "created_at", "end_notified", *TEST_FIELDS)
+
+
 def _test(row) -> Test:
-    d = dict(row)
+    d = {k: row[k] for k in _TEST_COLS}
     d["correct_answers"] = json.loads(d["correct_answers"])
     d["end_notified"] = bool(d["end_notified"])
     return Test(**d)
@@ -113,63 +124,135 @@ def _result(row) -> Result:
     return Result(**d)
 
 
-class Database:
+# ---------- SQLite / PostgreSQL uchun bir xil interfeys ----------
+
+class _SQLite:
+    id_type = "INTEGER PRIMARY KEY AUTOINCREMENT"
+
     def __init__(self, path: str):
         self.path = path
-        self.conn: aiosqlite.Connection | None = None
 
-    async def connect(self) -> None:
+    async def connect(self, schema: str) -> None:
+        import aiosqlite
+
         self.conn = await aiosqlite.connect(self.path)
         self.conn.row_factory = aiosqlite.Row
         await self.conn.execute("PRAGMA foreign_keys = ON")
-        await self.conn.executescript(SCHEMA)
+        await self.conn.executescript(schema)
         await self.conn.commit()
 
     async def close(self) -> None:
-        if self.conn:
-            await self.conn.close()
+        await self.conn.close()
+
+    async def execute(self, sql: str, *args) -> int:
+        cur = await self.conn.execute(sql, args)
+        await self.conn.commit()
+        return cur.rowcount
+
+    async def insert(self, sql: str, *args) -> int:
+        cur = await self.conn.execute(sql, args)
+        await self.conn.commit()
+        return cur.lastrowid
+
+    async def fetchone(self, sql: str, *args):
+        cur = await self.conn.execute(sql, args)
+        return await cur.fetchone()
+
+    async def fetchall(self, sql: str, *args):
+        cur = await self.conn.execute(sql, args)
+        return await cur.fetchall()
+
+
+class _Postgres:
+    id_type = "BIGSERIAL PRIMARY KEY"
+
+    def __init__(self, url: str):
+        self.url = url
+
+    @staticmethod
+    def _sql(sql: str) -> str:
+        # "?" belgilarini PostgreSQL uslubidagi $1, $2 ... ga almashtiramiz
+        parts = sql.split("?")
+        return parts[0] + "".join(f"${i}{p}" for i, p in enumerate(parts[1:], 1))
+
+    async def connect(self, schema: str) -> None:
+        import asyncpg
+
+        # asyncpg "channel_binding" parametrini tushunmaydi (Neon havolasida bo'ladi) — olib tashlaymiz.
+        # statement_cache_size=0 — pgbouncer (pooler) orqali ulanganda ham ishlashi uchun.
+        url = re.sub(r"[?&]channel_binding=[^&]*", "", self.url).replace("&&", "&")
+        if "?" not in url and "&" in url:
+            url = url.replace("&", "?", 1)
+        self.pool = await asyncpg.create_pool(url, min_size=1, max_size=5, statement_cache_size=0)
+        async with self.pool.acquire() as conn:
+            await conn.execute(schema)
+
+    async def close(self) -> None:
+        await self.pool.close()
+
+    async def execute(self, sql: str, *args) -> int:
+        status = await self.pool.execute(self._sql(sql), *args)  # masalan "INSERT 0 1"
+        try:
+            return int(status.split()[-1])
+        except ValueError:
+            return 0
+
+    async def insert(self, sql: str, *args) -> int:
+        return await self.pool.fetchval(self._sql(sql) + " RETURNING id", *args)
+
+    async def fetchone(self, sql: str, *args):
+        return await self.pool.fetchrow(self._sql(sql), *args)
+
+    async def fetchall(self, sql: str, *args):
+        return await self.pool.fetch(self._sql(sql), *args)
+
+
+class Database:
+    def __init__(self, path: str, url: str | None = None):
+        self.backend = _Postgres(url) if url else _SQLite(path)
+
+    async def connect(self) -> None:
+        await self.backend.connect(SCHEMA.replace("{ID}", self.backend.id_type))
+
+    async def close(self) -> None:
+        await self.backend.close()
 
     # ---------- foydalanuvchilar ----------
 
     async def upsert_user(self, user_id: int, tg_name: str, username: str | None) -> None:
-        await self.conn.execute(
+        await self.backend.execute(
             """
             INSERT INTO users (user_id, tg_name, username, created_at) VALUES (?, ?, ?, ?)
-            ON CONFLICT(user_id) DO UPDATE SET tg_name = excluded.tg_name, username = excluded.username
+            ON CONFLICT (user_id) DO UPDATE SET tg_name = excluded.tg_name, username = excluded.username
             """,
-            (user_id, tg_name, username, _now()),
+            user_id, tg_name, username, _now(),
         )
-        await self.conn.commit()
 
     async def get_full_name(self, user_id: int) -> str | None:
-        cur = await self.conn.execute("SELECT full_name FROM users WHERE user_id = ?", (user_id,))
-        row = await cur.fetchone()
+        row = await self.backend.fetchone("SELECT full_name FROM users WHERE user_id = ?", user_id)
         return row["full_name"] if row else None
 
     async def set_full_name(self, user_id: int, full_name: str) -> None:
-        await self.conn.execute(
+        await self.backend.execute(
             """
             INSERT INTO users (user_id, full_name, created_at) VALUES (?, ?, ?)
-            ON CONFLICT(user_id) DO UPDATE SET full_name = excluded.full_name
+            ON CONFLICT (user_id) DO UPDATE SET full_name = excluded.full_name
             """,
-            (user_id, full_name, _now()),
+            user_id, full_name, _now(),
         )
-        await self.conn.commit()
 
     # ---------- sozlamalar ----------
 
     async def get_setting(self, key: str) -> str | None:
-        cur = await self.conn.execute("SELECT value FROM settings WHERE key = ?", (key,))
-        row = await cur.fetchone()
+        row = await self.backend.fetchone("SELECT value FROM settings WHERE key = ?", key)
         return row["value"] if row else None
 
     async def set_setting(self, key: str, value: str) -> None:
-        await self.conn.execute(
+        await self.backend.execute(
             "INSERT INTO settings (key, value) VALUES (?, ?) "
-            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            (key, value),
+            "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+            key, value,
         )
-        await self.conn.commit()
 
     # ---------- testlar ----------
 
@@ -180,76 +263,70 @@ class Database:
             values[f] = values[f] or ""
         cols = ", ".join(values)
         marks = ", ".join("?" for _ in values)
-        cur = await self.conn.execute(
+        test_id = await self.backend.insert(
             f"INSERT INTO tests ({cols}, created_at) VALUES ({marks}, ?)",
-            (*values.values(), _now()),
+            *values.values(), _now(),
         )
-        await self.conn.commit()
-        return await self.get_test(cur.lastrowid)
+        return await self.get_test(test_id)
 
     async def update_test(self, test_id: int, **fields) -> None:
         assert set(fields) <= set(TEST_FIELDS) | {"end_notified"}
         if "correct_answers" in fields:
             fields["correct_answers"] = json.dumps(fields["correct_answers"])
+        if "end_notified" in fields:
+            fields["end_notified"] = int(fields["end_notified"])
         sets = ", ".join(f"{k} = ?" for k in fields)
-        await self.conn.execute(f"UPDATE tests SET {sets} WHERE id = ?", (*fields.values(), test_id))
-        await self.conn.commit()
+        await self.backend.execute(f"UPDATE tests SET {sets} WHERE id = ?", *fields.values(), test_id)
 
     async def get_test(self, test_id: int) -> Test | None:
-        cur = await self.conn.execute("SELECT * FROM tests WHERE id = ?", (test_id,))
-        row = await cur.fetchone()
+        row = await self.backend.fetchone("SELECT * FROM tests WHERE id = ?", test_id)
         return _test(row) if row else None
 
     async def get_test_by_code(self, code: str) -> Test | None:
-        cur = await self.conn.execute("SELECT * FROM tests WHERE code = ?", (code.strip(),))
-        row = await cur.fetchone()
+        row = await self.backend.fetchone(
+            "SELECT * FROM tests WHERE lower(code) = lower(?)", code.strip()
+        )
         return _test(row) if row else None
 
     async def code_taken(self, code: str, exclude_id: int | None = None) -> bool:
-        cur = await self.conn.execute(
-            "SELECT 1 FROM tests WHERE code = ? AND id != ?", (code, exclude_id or 0)
+        row = await self.backend.fetchone(
+            "SELECT 1 AS x FROM tests WHERE lower(code) = lower(?) AND id != ?", code, exclude_id or 0
         )
-        return await cur.fetchone() is not None
+        return row is not None
 
     async def list_tests(self) -> list[tuple[Test, int]]:
-        cur = await self.conn.execute(
+        rows = await self.backend.fetchall(
             """
             SELECT t.*, (SELECT COUNT(*) FROM test_results r WHERE r.test_id = t.id) AS cnt
             FROM tests t ORDER BY t.id DESC
             """
         )
-        rows = await cur.fetchall()
-        return [(_test({k: r[k] for k in r.keys() if k != "cnt"}), r["cnt"]) for r in rows]
+        return [(_test(r), int(r["cnt"])) for r in rows]
 
     async def unnotified_tests(self) -> list[Test]:
-        cur = await self.conn.execute("SELECT * FROM tests WHERE end_notified = 0")
-        return [_test(r) for r in await cur.fetchall()]
+        return [_test(r) for r in await self.backend.fetchall("SELECT * FROM tests WHERE end_notified = 0")]
 
     async def delete_test(self, test_id: int) -> None:
-        await self.conn.execute("DELETE FROM tests WHERE id = ?", (test_id,))
-        await self.conn.commit()
+        await self.backend.execute("DELETE FROM tests WHERE id = ?", test_id)
 
     async def recalc_results(self, test_id: int, correct: dict[str, str]) -> None:
         """To'g'ri javoblar o'zgartirilganda barcha natijalarni qayta hisoblaydi."""
         for r in await self.list_results(test_id):
-            await self.conn.execute(
+            await self.backend.execute(
                 "UPDATE test_results SET correct_count = ?, total = ? WHERE id = ?",
-                (count_correct(correct, r.answers), len(correct), r.id),
+                count_correct(correct, r.answers), len(correct), r.id,
             )
-        await self.conn.commit()
 
     # ---------- natijalar ----------
 
     async def get_result(self, test_id: int, student_id: int) -> Result | None:
-        cur = await self.conn.execute(
-            "SELECT * FROM test_results WHERE test_id = ? AND student_id = ?", (test_id, student_id)
+        row = await self.backend.fetchone(
+            "SELECT * FROM test_results WHERE test_id = ? AND student_id = ?", test_id, student_id
         )
-        row = await cur.fetchone()
         return _result(row) if row else None
 
     async def get_result_by_id(self, result_id: int) -> Result | None:
-        cur = await self.conn.execute("SELECT * FROM test_results WHERE id = ?", (result_id,))
-        row = await cur.fetchone()
+        row = await self.backend.fetchone("SELECT * FROM test_results WHERE id = ?", result_id)
         return _result(row) if row else None
 
     async def add_result(
@@ -262,25 +339,24 @@ class Database:
         total: int,
     ) -> bool:
         """Javobni saqlaydi. O'quvchi avval topshirgan bo'lsa False qaytaradi."""
-        cur = await self.conn.execute(
+        inserted = await self.backend.execute(
             """
-            INSERT OR IGNORE INTO test_results
+            INSERT INTO test_results
                 (test_id, student_id, student_name, answers, correct_count, total, submitted_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (test_id, student_id) DO NOTHING
             """,
-            (test_id, student_id, student_name, json.dumps(answers), correct_count, total, _now()),
+            test_id, student_id, student_name, json.dumps(answers), correct_count, total, _now(),
         )
-        await self.conn.commit()
-        return cur.rowcount > 0
+        return inserted > 0
 
     async def list_results(self, test_id: int) -> list[Result]:
         """Natijalar: eng ko'p to'g'ri javob berganidan eng kamiga qarab tartiblangan."""
-        cur = await self.conn.execute(
-            "SELECT * FROM test_results WHERE test_id = ? ORDER BY correct_count DESC, submitted_at",
-            (test_id,),
+        rows = await self.backend.fetchall(
+            "SELECT * FROM test_results WHERE test_id = ? ORDER BY correct_count DESC, submitted_at, id",
+            test_id,
         )
-        return [_result(r) for r in await cur.fetchall()]
+        return [_result(r) for r in rows]
 
     async def mark_result_sent(self, result_id: int) -> None:
-        await self.conn.execute("UPDATE test_results SET result_sent = 1 WHERE id = ?", (result_id,))
-        await self.conn.commit()
+        await self.backend.execute("UPDATE test_results SET result_sent = 1 WHERE id = ?", result_id)

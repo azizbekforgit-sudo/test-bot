@@ -417,7 +417,7 @@ async def result_detail(call: CallbackQuery, callback_data: kb.ResCb, db: Databa
         total=res.total,
         percent=percent(res.correct_count, res.total),
         rank=f"{ids.index(res.id) + 1} / {len(ids)}",
-        time=res.submitted_at.replace("T", " "),
+        time=res.submitted_at,
         rows="\n".join(rows),
     )
     await safe_edit(call.message, text, kb.result_back_kb(test.id, callback_data.page))
